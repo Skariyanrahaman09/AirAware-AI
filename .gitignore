@@ -1,0 +1,69 @@
+# ==========================================
+# AirAware AI - .gitignore
+# ==========================================
+
+# Dependencies
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+
+# Next.js Build Outputs
+.next/
+*/.next/
+out/
+*/out/
+build/
+dist/
+
+# Environment Variables & Secrets (Keep .env.example committed)
+.env
+.env*.local
+*.env
+server/.env
+client/.env.local
+!*.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing & Coverage
+coverage/
+jest-cache/
+*/jest-cache/
+.nyc_output/
+
+# Temporary & Cache Directories
+tmp/
+*/tmp/
+.cache/
+.turbo/
+.vercel/
+next-env.d.ts
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor Files
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
