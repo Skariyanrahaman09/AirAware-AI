@@ -1,7 +1,7 @@
 # AirAware AI – Smart Winter Smog & Air Pollution Assistant
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-AirAware--AI-emerald?style=flat&logo=github)](https://github.com/Skariyanrahaman09/AirAware-AI)
-[![Tests Passing](https://img.shields.io/badge/Tests-74%20passed%20(100%25)-brightgreen?style=flat&logo=jest)](server/tests/)
+[![Tests Passing](https://img.shields.io/badge/Tests-88%20passed%20(100%25)-brightgreen?style=flat&logo=jest)](server/tests/)
 [![CI Pipeline](https://img.shields.io/badge/CI-GitHub%20Actions-blue?style=flat&logo=github-actions)](.github/workflows/ci.yml)
 [![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-success?style=flat)](client/src/components/)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?style=flat&logo=next.js)](https://nextjs.org/)
@@ -219,7 +219,7 @@ Promptwar- 6/
 
 ## 🧪 Running Automated Tests
 
-A comprehensive automated test suite with **74 passing tests across 8 test suites** (100% pass rate) validates all aspects of backend services, security middleware, input validation schemas, prompt sanitization, statutory CPCB NAQI calculation, US EPA breakpoints, deterministic external API mocking, and REST API routes:
+A comprehensive automated test suite with **88 passing tests across 9 test suites** (100% pass rate) validates all aspects of backend services, security middleware, input validation schemas, prompt sanitization, statutory CPCB NAQI calculation, US EPA breakpoints, deterministic external API mocking, production deployment readiness, and REST API routes:
 
 ```bash
 cd server
@@ -227,14 +227,128 @@ npm test
 ```
 
 ### Complete Test Suites:
+- `tests/productionDeploymentReadiness.test.js`: Health monitoring endpoints (`/api/health` and `/health`), database connectivity status, Express reverse-proxy trust header for cloud load balancers, production refusal of missing `MONGO_URI`, credential sanitization in logs, and CORS origin restrictions.
 - `tests/api.test.js`: Health checks, Air Quality endpoints, Routine generator, Impact calculator, AI chat, Community posts, and Auth registration/login flows.
-- `tests/cpcbAndEnvironmentalAccuracy.test.js`: Indian statutory Central Pollution Control Board (CPCB NAQI) sub-indices calculation across all 6 breakpoint bands (Good, Satisfactory, Moderate, Poor, Very Poor, Severe), EPA vs CPCB distinctions, dual standards response schema, source provenance validation (`live`, `cached`, `simulated`), and sensor telemetry integrity (ensuring absent gases are strictly `null` and never fabricated).
+- `tests/cpcbAndEnvironmentalAccuracy.test.js`: Indian statutory Central Pollution Control Board (CPCB NAQI) sub-indices calculation across all 6 breakpoint bands (Good, Satisfactory, Moderate, Poor, Very Poor, Severe), EPA vs CPCB distinctions, dual standards response schema, source provenance validation (`live`, `cached`, `simulated`), dynamic standard resolution on cache hits, and sensor telemetry integrity (ensuring absent gases are strictly `null` and never fabricated).
 - `tests/securityAndValidation.test.js`: OWASP security headers (`nosniff`, `DENY`, HSTS, Referrer-Policy, Permissions-Policy), recursive NoSQL query injection sanitizer stripping `$` and `.` operators, input validation middleware (rejecting weak passwords, invalid emails, empty queries, invalid distance ranges), prompt injection defense (`sanitizeQuery`), and production error information leakage prevention.
 - `tests/externalApiMocking.test.js`: Deterministic Open-Meteo & OpenAI API mocking, testing network timeouts, 500 server errors, and verifying robust zero-crash fallbacks.
 - `tests/airQualityService.test.js`: EPA PM2.5 breakpoints calculation (Good, Moderate, USG, Unhealthy, Very Unhealthy, Hazardous), color codes, worldwide geocoding, autocomplete search, and 5-day forecasts.
 - `tests/recommendationService.test.js`: 4-block schedule (What, Why, How), particulate vs gas differentiation, and budget alternatives.
 - `tests/impactCalculator.test.js`: Commute mode shifting, tree absorption equivalents, fuel savings, and scientific disclaimers.
 - `tests/aiService.test.js`: Required JSON schema validation, indoor tips, and child/senior vulnerability protections.
+
+---
+
+## 🌐 Production Deployment Guide (Vercel + Render + MongoDB Atlas)
+
+Follow this step-by-step guide to launch AirAware AI for real-world public access.
+
+### Deployment Architecture
+- **Frontend (Vercel)**: Next.js App Router, SSR, edge caching, and internal API rewrites to the backend.
+- **Backend (Render)**: Node.js/Express REST API Web Service running behind reverse proxy, with OWASP headers and rate limiting.
+- **Database (MongoDB Atlas)**: Dedicated cloud MongoDB cluster with encrypted storage, automated backups, and replica sets.
+
+---
+
+### Step 1: Set Up MongoDB Atlas Database
+1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) and create a free account (or log in).
+2. Click **"Build a Database"** and select the free **M0 Shared** tier.
+3. Select your preferred cloud provider (AWS / Google Cloud) and nearest geographic region.
+4. Set up security credentials:
+   - **Database User**: Create a username (e.g. `airaware_admin`) and a strong password. Note these down securely.
+   - **IP Access List**: Go to **Network Access** -> **Add IP Address** -> Select **"Allow Access from Anywhere"** (`0.0.0.0/0`) so Render's dynamic container IPs can connect.
+5. Retrieve the Connection URI:
+   - Click **Connect** -> **Drivers** (Node.js).
+   - Copy the connection string:
+     ```text
+     mongodb+srv://<username>:<password>@cluster0.abcde.mongodb.net/airaware?retryWrites=true&w=majority
+     ```
+   - Replace `<username>` and `<password>` with your database user credentials.
+
+---
+
+### Step 2: Deploy Backend to Render
+1. Go to [Render.com](https://render.com) and create or log in to your account.
+2. Click **New +** -> **Web Service**.
+3. Connect your GitHub repository: `https://github.com/Skariyanrahaman09/AirAware-AI`.
+4. Configure the service settings:
+   - **Name**: `airaware-ai-backend` (or your chosen name)
+   - **Region**: Nearest region to your users (e.g. Frankfurt, Oregon, Singapore)
+   - **Branch**: `feature/production-engineering-upgrade` (or `main` after pull request approval)
+   - **Root Directory**: `server`
+   - **Runtime**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Instance Type**: `Free`
+5. Click **Advanced** and set **Health Check Path** to `/api/health`.
+6. Add **Environment Variables** in the Render Dashboard:
+   | Variable | Value | Notes |
+   | :--- | :--- | :--- |
+   | `NODE_ENV` | `production` | Enforces production security, sanitizes errors, requires Atlas DB |
+   | `PORT` | `5000` | Render injects this automatically |
+   | `HOST` | `0.0.0.0` | Binds server to all container network interfaces |
+   | `MONGO_URI` | `mongodb+srv://...` | Your MongoDB Atlas connection string from Step 1 |
+   | `JWT_SECRET` | *(Random 32+ char key)* | Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+   | `JWT_EXPIRES_IN`| `7d` | Token expiration duration |
+   | `CORS_ORIGIN` | `https://your-frontend.vercel.app` | Temporarily set or update after Vercel deployment in Step 3 |
+   | `OPENAI_API_KEY`| *(Optional)* | Your OpenAI API key (optional; built-in AI engine active if empty) |
+   | `OPENAI_MODEL` | `gpt-4o-mini` | Recommended OpenAI model |
+7. Click **Create Web Service**.
+8. Once deployed, copy your public backend URL (e.g. `https://airaware-ai-backend.onrender.com`).
+9. Verify health by visiting `https://airaware-ai-backend.onrender.com/api/health` in your browser. You should receive:
+   ```json
+   {
+     "status": "healthy",
+     "database": "connected",
+     "service": "AirAware AI Backend",
+     "version": "1.0.0"
+   }
+   ```
+
+---
+
+### Step 3: Deploy Frontend to Vercel
+1. Go to [Vercel.com](https://vercel.com) and log in with your GitHub account.
+2. Click **Add New...** -> **Project**.
+3. Select your repository `AirAware-AI` and click **Import**.
+4. Configure the Project:
+   - **Framework Preset**: `Next.js` (automatically detected)
+   - **Root Directory**: Click **Edit** and select `client`
+   - **Build Command**: `next build` (default)
+   - **Output Directory**: `.next` (default)
+   - **Install Command**: `npm install` (default)
+5. Expand **Environment Variables** and add:
+   | Name | Value |
+   | :--- | :--- |
+   | `NEXT_PUBLIC_API_URL` | `https://airaware-ai-backend.onrender.com` *(your Render URL from Step 2, no trailing slash)* |
+6. Click **Deploy**.
+7. Vercel will build and deploy the Next.js production bundle.
+8. Once complete, copy your public frontend domain (e.g. `https://airaware-ai.vercel.app`).
+
+---
+
+### Step 4: Finalize CORS on Render
+1. Return to your [Render Dashboard](https://dashboard.render.com).
+2. Open your `airaware-ai-backend` Web Service -> **Environment**.
+3. Update `CORS_ORIGIN` with your live Vercel URL from Step 3:
+   ```text
+   CORS_ORIGIN=https://airaware-ai.vercel.app
+   ```
+4. Click **Save Changes**. Render will automatically redeploy the backend with the new allowed origin.
+
+---
+
+### Step 5: Troubleshooting Common Deployment Issues
+- **Render Free Tier Spin-Down**: On Render's free tier, backend instances sleep after 15 minutes of inactivity. The first incoming request may take 30–50 seconds to wake up the server. The client automatically has a 15-second timeout and retry logic.
+- **CORS Error (`Access-Control-Allow-Origin`)**: Ensure `CORS_ORIGIN` in Render matches your exact Vercel URL without a trailing slash (`https://your-app.vercel.app`, not `https://your-app.vercel.app/`).
+- **MongoDB Connection Timed Out**: In MongoDB Atlas, verify that **Network Access** has IP `0.0.0.0/0` enabled and the database user has Read and Write permissions.
+- **Double `/api/api` in Requests**: In Vercel, ensure `NEXT_PUBLIC_API_URL` is set to `https://your-backend.onrender.com` without `/api` or trailing slashes. Next.js internal rewrites automatically map `/api/*` to the backend.
+
+---
+
+### Step 6: Automatic GitHub CI/CD Deployments
+- Pushes to your tracked feature branch or `main` automatically run the GitHub Actions CI pipeline (`.github/workflows/ci.yml`), executing all 88 automated backend tests and Next.js production builds.
+- Render and Vercel automatically trigger zero-downtime redeployments whenever code is pushed to your production branch.
 
 ---
 

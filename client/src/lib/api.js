@@ -1,13 +1,15 @@
 import axios from 'axios';
 
-// When running in the browser, use relative path '/api' so Next.js rewrites it internally
-// to http://localhost:5000, keeping backend APIs private and making localhost:3000 the single entry point.
-// When running in Node/SSR, fall back to the absolute backend URL.
+// When running in the browser, relative path '/api' is used so Next.js rewrites it internally
+// to the configured backend origin (defined via NEXT_PUBLIC_API_URL).
+// In Node/SSR, normalize and fall back to the absolute backend URL.
 const getBaseURL = () => {
   if (typeof window !== 'undefined') {
     return '/api';
   }
-  return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api`;
+  const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const cleanOrigin = rawUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  return `${cleanOrigin}/api`;
 };
 
 const api = axios.create({

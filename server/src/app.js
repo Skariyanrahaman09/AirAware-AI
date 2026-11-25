@@ -3,6 +3,7 @@ const cors = require('cors');
 const { securityHeaders, noSqlSanitizer } = require('./middleware/securityMiddleware');
 const { generalLimiter } = require('./middleware/rateLimiters');
 const { notFoundHandler, errorHandler } = require('./middleware/errorMiddleware');
+const { getDatabaseStatus } = require('./config/database');
 
 // Route imports
 const authRoutes = require('./routes/authRoutes');
@@ -15,14 +16,44 @@ const communityRoutes = require('./routes/communityRoutes');
 
 const app = express();
 
+// Trust reverse proxy header (essential for Render, Vercel, Heroku, Cloudflare load balancers)
+app.set('trust proxy', 1);
+
 // Security Headers (OWASP compliant)
 app.use(securityHeaders);
 
-// CORS configuration (strictly scoped or defaults to local Next.js frontend)
-const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+// CORS configuration (supports comma-separated origins, rejects wildcard in production)
+const rawCorsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const isProduction = process.env.NODE_ENV === 'production';
+
+let corsOrigin;
+if (isProduction) {
+  if (rawCorsOrigin === '*') {
+    console.warn('[Security Warning] Wildcard CORS_ORIGIN="*" is not permitted in production. Falling back to localhost.');
+    corsOrigin = false;
+  } else {
+    corsOrigin = rawCorsOrigin
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+  }
+} else {
+  corsOrigin =
+    rawCorsOrigin === '*'
+      ? '*'
+      : [
+          ...rawCorsOrigin
+            .split(',')
+            .map((o) => o.trim())
+            .filter(Boolean),
+          'http://localhost:3000',
+          'http://127.0.0.1:3000',
+        ];
+}
+
 app.use(
   cors({
-    origin: allowedOrigin === '*' ? '*' : [allowedOrigin, 'http://127.0.0.1:3000', 'http://localhost:3000'],
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -38,16 +69,27 @@ app.use(noSqlSanitizer);
 // General Rate Limiting
 app.use('/api', generalLimiter);
 
-// Health Check Endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'healthy',
+// Health Check Endpoints (/api/health and /health for Render monitoring)
+const healthHandler = (req, res) => {
+  const dbStatus = getDatabaseStatus();
+  const isHealthy = dbStatus === 'connected';
+
+  // In production, return 503 if database is disconnected
+  const statusCode = isHealthy || process.env.NODE_ENV !== 'production' ? 200 : 503;
+
+  res.status(statusCode).json({
+    status: isHealthy ? 'healthy' : 'degraded',
+    database: dbStatus,
+    uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     service: 'AirAware AI Backend',
     version: '1.0.0',
     environment: process.env.NODE_ENV || 'development',
   });
-});
+};
+
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
