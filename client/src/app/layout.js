@@ -16,8 +16,9 @@ export default function RootLayout({ children }) {
       <body className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
         <AuthProvider>
           <AirDataProvider>
+            <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:font-semibold focus:text-slate-900 focus:shadow-lg">Skip to main content</a>
             <Navbar />
-            <main className="flex-1">{children}</main>
+            <main id="main-content" tabIndex={-1} className="flex-1">{children}</main>
             <Footer />
           </AirDataProvider>
         </AuthProvider>

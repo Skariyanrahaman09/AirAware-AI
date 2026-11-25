@@ -3,24 +3,29 @@ let mongodInstance = null;
 
 const connectDB = async () => {
   const mongoUri = process.env.MONGO_URI;
+  const isTest = process.env.NODE_ENV === 'test';
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  if (mongoUri && process.env.NODE_ENV !== 'test') {
+  if (!isTest && mongoUri) {
     try {
       const conn = await mongoose.connect(mongoUri);
       console.log(`[Database] MongoDB connected successfully: ${conn.connection.host}`);
       return conn;
     } catch (err) {
-      console.warn(`[Database] Failed to connect to configured MONGO_URI (${err.message}). Falling back to in-memory database.`);
+      console.error('[Database] Configured MongoDB connection failed.');
+      throw err;
     }
   }
 
-  // In-memory MongoDB fallback (for local development without running mongod service, and tests)
+  if (isProduction) {
+    throw new Error('MONGO_URI must be configured in production. In-memory databases are development/test only.');
+  }
+
   try {
     const { MongoMemoryServer } = require('mongodb-memory-server');
     mongodInstance = await MongoMemoryServer.create();
-    const uri = mongodInstance.getUri();
-    const conn = await mongoose.connect(uri);
-    console.log(`[Database] Connected to in-memory MongoDB (${uri})`);
+    const conn = await mongoose.connect(mongodInstance.getUri());
+    console.log('[Database] Connected to in-memory MongoDB (development/test only).');
     return conn;
   } catch (err) {
     console.error('[Database] Failed to initialize in-memory database:', err.message);
@@ -30,14 +35,11 @@ const connectDB = async () => {
 
 const disconnectDB = async () => {
   try {
-    if (mongoose.connection.readyState !== 0) {
-      await mongoose.disconnect();
-    }
+    if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
     if (mongodInstance) {
       await mongodInstance.stop();
       mongodInstance = null;
     }
-    console.log('[Database] MongoDB disconnected cleanly');
   } catch (err) {
     console.error('[Database] Disconnect error:', err.message);
   }
