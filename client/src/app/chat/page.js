@@ -5,6 +5,14 @@ import { useAirData } from '../../context/AirDataContext';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 import {
+  buildGreeting,
+  formatContextSummary,
+  buildErrorText,
+  createMessage,
+  toStringList,
+  toText,
+} from './chatUtils';
+import {
   Bot,
   User,
   Send,
@@ -23,19 +31,9 @@ import {
 export default function ChatPage() {
   const { airData, selectedCity } = useAirData();
   const { user } = useAuth();
+  const activeCity = airData?.city || selectedCity;
 
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: `Hello! I am your AirAware Environmental Assistant. I am monitoring live air quality in ${
-        airData?.city || selectedCity
-      } where AQI is currently ${airData?.aqi || 180} (${
-        airData?.severity || 'Unhealthy'
-      }). How can I help protect your health or reduce your emissions today?`,
-      structuredData: null,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -62,18 +60,14 @@ export default function ChatPage() {
     if (!textToSend || loading) return;
 
     setInput('');
-    const userMsg = {
-      role: 'user',
-      content: textToSend,
-      timestamp: new Date(),
-    };
+    const userMsg = createMessage('user', textToSend);
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
     try {
       const payload = {
         query: textToSend,
-        city: airData?.city || selectedCity,
+        city: activeCity,
         lat: airData?.coordinates?.lat,
         lon: airData?.coordinates?.lon,
         sessionId: user?.id || 'guest-session',
@@ -83,23 +77,30 @@ export default function ChatPage() {
       const res = await api.post('/ai/chat', payload);
 
       if (res.data.success && res.data.response) {
-        const assistantMsg = {
-          role: 'assistant',
-          content: res.data.response.airQualitySummary || 'Here is your personalized environmental guidance.',
-          structuredData: res.data.response,
-          timestamp: new Date(),
+        const resp = res.data.response;
+        const sanitizedStructured = {
+          ...resp,
+          pollutionLevel: toText(resp.pollutionLevel),
+          airQualitySummary: toText(resp.airQualitySummary),
+          healthRisks: toStringList(resp.healthRisks),
+          recommendedActions: toStringList(resp.recommendedActions),
+          indoorSafetyTips: toStringList(resp.indoorSafetyTips),
+          lowEmissionAlternatives: toStringList(resp.lowEmissionAlternatives),
         };
+        const assistantMsg = createMessage(
+          'assistant',
+          toText(resp.airQualitySummary) || 'Here is your personalized environmental guidance.',
+          { structuredData: sanitizedStructured }
+        );
         setMessages((prev) => [...prev, assistantMsg]);
       }
     } catch (err) {
       console.warn('Chat error:', err);
-      const errorMsg = {
-        role: 'assistant',
-        content:
-          'I encountered an issue connecting to the AI model. Based on your current AQI, please keep windows sealed and run indoor HEPA filtration.',
-        structuredData: null,
-        timestamp: new Date(),
-      };
+      const errorMsg = createMessage(
+        'assistant',
+        buildErrorText(activeCity, airData?.healthGuidance),
+        { structuredData: null }
+      );
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setLoading(false);
@@ -123,27 +124,13 @@ export default function ChatPage() {
             </div>
             <p className="text-[11px] text-slate-500 flex items-center gap-1">
               <MapPin className="w-3 h-3 text-emerald-600" />
-              <span>
-                {airData?.city || selectedCity} • AQI {airData?.aqi || 'N/A'} ({airData?.severity || 'Active'}) • Temp{' '}
-                {airData?.weather?.temperature || '20'}°C
-              </span>
+              <span>{formatContextSummary(airData, activeCity)}</span>
             </p>
           </div>
         </div>
 
         <button
-          onClick={() =>
-            setMessages([
-              {
-                role: 'assistant',
-                content: `Chat session refreshed. Current AQI in ${airData?.city || selectedCity} is ${
-                  airData?.aqi || 180
-                }. Ask any environmental or health question!`,
-                structuredData: null,
-                timestamp: new Date(),
-              },
-            ])
-          }
+          onClick={() => setMessages([])}
           title="Reset Chat"
           aria-label="Reset chat history"
           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
@@ -159,12 +146,26 @@ export default function ChatPage() {
         aria-label="Conversation messages"
         className="flex-1 overflow-y-auto space-y-4 pr-1"
       >
+        {/* Dynamic Live Greeting */}
+        {messages.length === 0 && (
+          <div className="flex gap-3 justify-start">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-1">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div className="max-w-2xl space-y-3 items-start">
+              <div className="p-4 rounded-2xl text-sm leading-relaxed shadow-xs bg-white border border-slate-200/90 text-slate-800 rounded-bl-none">
+                <p>{buildGreeting(airData, activeCity)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {messages.map((msg, index) => {
           const isUser = msg.role === 'user';
           const struct = msg.structuredData;
 
           return (
-            <div key={index} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg.id || index} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
               {!isUser && (
                 <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-1">
                   <Bot className="w-4 h-4" />
@@ -199,14 +200,14 @@ export default function ChatPage() {
                     </div>
 
                     {/* Recommended Actions (WHAT, WHY, HOW) */}
-                    {struct.recommendedActions && struct.recommendedActions.length > 0 && (
+                    {toStringList(struct.recommendedActions).length > 0 && (
                       <div className="space-y-2">
                         <div className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Recommended Actions</span>
                         </div>
                         <ul className="space-y-1.5 pl-1">
-                          {struct.recommendedActions.map((action, i) => (
+                          {toStringList(struct.recommendedActions).map((action, i) => (
                             <li key={i} className="flex items-start gap-2 text-slate-700 leading-relaxed">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
                               <span>{action}</span>
@@ -217,14 +218,14 @@ export default function ChatPage() {
                     )}
 
                     {/* Indoor Safety Tips */}
-                    {struct.indoorSafetyTips && struct.indoorSafetyTips.length > 0 && (
+                    {toStringList(struct.indoorSafetyTips).length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-slate-100">
                         <div className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
                           <Home className="w-3.5 h-3.5 text-sky-600" />
                           <span>Indoor Air Quality Strategies</span>
                         </div>
                         <ul className="space-y-1.5 pl-1">
-                          {struct.indoorSafetyTips.map((tip, i) => (
+                          {toStringList(struct.indoorSafetyTips).map((tip, i) => (
                             <li key={i} className="flex items-start gap-2 text-slate-700 leading-relaxed">
                               <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0 mt-1.5" />
                               <span>{tip}</span>
@@ -235,14 +236,14 @@ export default function ChatPage() {
                     )}
 
                     {/* Low Emission Alternatives */}
-                    {struct.lowEmissionAlternatives && struct.lowEmissionAlternatives.length > 0 && (
+                    {toStringList(struct.lowEmissionAlternatives).length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-slate-100">
                         <div className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
                           <Leaf className="w-3.5 h-3.5 text-teal-600" />
                           <span>Low-Emission Alternatives</span>
                         </div>
                         <ul className="space-y-1.5 pl-1">
-                          {struct.lowEmissionAlternatives.map((alt, i) => (
+                          {toStringList(struct.lowEmissionAlternatives).map((alt, i) => (
                             <li key={i} className="flex items-start gap-2 text-slate-700 leading-relaxed">
                               <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0 mt-1.5" />
                               <span>{alt}</span>
@@ -253,24 +254,24 @@ export default function ChatPage() {
                     )}
 
                     {/* Health Precautions & Vulnerability Notice */}
-                    {struct.healthPrecautions && (
+                    {toText(struct.healthPrecautions) && (
                       <div className="p-3 rounded-xl bg-rose-50/70 border border-rose-200 text-rose-900 space-y-1">
                         <div className="font-bold flex items-center gap-1.5 text-[11px]">
                           <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                           <span>Health & Vulnerable Group Precautions</span>
                         </div>
-                        <p className="leading-relaxed">{struct.healthPrecautions}</p>
+                        <p className="leading-relaxed">{toText(struct.healthPrecautions)}</p>
                       </div>
                     )}
 
                     {/* Estimated Impact */}
-                    {struct.estimatedImpact && (
+                    {toText(struct.estimatedImpact) && (
                       <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 text-emerald-900 space-y-1">
                         <div className="font-bold flex items-center gap-1.5 text-[11px]">
                           <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
                           <span>Estimated Environmental & Health Impact</span>
                         </div>
-                        <p className="leading-relaxed">{struct.estimatedImpact}</p>
+                        <p className="leading-relaxed">{toText(struct.estimatedImpact)}</p>
                       </div>
                     )}
                   </div>
