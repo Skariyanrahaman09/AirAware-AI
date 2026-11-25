@@ -60,4 +60,31 @@ describe('AI Environmental Assistant Service Tests', () => {
     expect(response.healthPrecautions).toContain('Children');
     expect(response.healthPrecautions).toContain('elderly');
   });
+  test('does not invent AQI or weather values when readings are unavailable', () => {
+    const response = generateExpertEnvironmentalResponse({
+      query: 'Is it safe to go outside?',
+      airData: { city: 'Kolkata' },
+      weatherData: {},
+    });
+
+    expect(response.pollutionLevel).toBe('Unknown');
+    expect(response.airQualitySummary).toContain('AQI reading for Kolkata is unavailable');
+    expect(response.airQualitySummary).not.toContain('180');
+    expect(response.airQualitySummary).toContain('Temperature reading is unavailable');
+  });
+
+  test('rejects malformed structured AI payloads', () => {
+    const { isValidAiPayload } = require('../src/services/openaiService');
+    expect(isValidAiPayload({ airQualitySummary: 'ok' })).toBe(false);
+    expect(isValidAiPayload({
+      airQualitySummary: 'Summary',
+      pollutionLevel: 'Good',
+      recommendedActions: [],
+      indoorSafetyTips: [],
+      lowEmissionAlternatives: [],
+      estimatedImpact: 'Not quantified',
+      healthPrecautions: 'Follow local guidance',
+    })).toBe(true);
+  });
+
 });
