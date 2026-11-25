@@ -73,7 +73,7 @@ AirAware AI acts as an intelligent environmental health assistant that provides 
 ### Backend
 - **Node.js & Express.js**: Modular REST API architecture.
 - **MongoDB & Mongoose**: Schemas for Users, Family Profiles, Chat History, and Community Posts.
-- **In-Memory Zero-Setup Fallback**: Automatically spins up an in-memory database if a standalone MongoDB daemon is not running locally.
+- **Development Database Fallback**: In-memory MongoDB is available for local development/tests only; production requires a configured persistent MongoDB URI.
 - **JWT & Bcrypt**: Secure token-based authentication and password hashing.
 - **Axios & Rate Limiting**: Caching external air quality requests and preventing abuse.
 - **Jest & Supertest**: Automated test suite covering endpoints, calculations, and AI responses.
@@ -190,7 +190,7 @@ Promptwar- 6/
    npm install
    npm run dev
    ```
-   *The backend will automatically start on `http://localhost:5000` with an in-memory MongoDB store if no external MongoDB URI is provided.*
+   *The backend can start with an in-memory MongoDB store in local development when no external MongoDB URI is provided. Production requires `MONGO_URI` and a strong `JWT_SECRET`.*
 
 3. **Start Frontend Web Application**:
    In your second terminal:
@@ -226,14 +226,14 @@ npm test
 
 ## 🔑 Environment Variables Reference
 
-See `.env.example` in the project root:
+See `.env.example` in the project root. Generate a unique secret (at least 32 characters) for each environment; never reuse the example value or commit real credentials:
 
 | Variable | Description | Default / Example |
 | :--- | :--- | :--- |
 | `PORT` | Backend server port | `5000` |
 | `NODE_ENV` | Environment mode | `development` / `production` |
 | `CORS_ORIGIN` | Allowed client origin | `http://localhost:3000` |
-| `MONGO_URI` | MongoDB connection URI | *(Empty = auto in-memory)* |
+| `MONGO_URI` | MongoDB connection URI | *(Required in production; empty enables local in-memory development mode)* |
 | `JWT_SECRET` | Secret key for JWT auth | `airaware_ai_secure_jwt_secret_dev_2026` |
 | `JWT_EXPIRES_IN` | Token expiration duration | `7d` |
 | `OPENAI_API_KEY` | OpenAI API Key for GPT | *(Optional, falls back to internal engine)* |
@@ -243,6 +243,11 @@ See `.env.example` in the project root:
 ---
 
 ## 🛡️ Security & Performance
+
+- API requests are size-limited; authentication and AI endpoints have dedicated rate limits.
+- Browser origins are restricted to the comma-separated `CORS_ORIGIN` allowlist.
+- Production startup fails closed when `JWT_SECRET` or `MONGO_URI` is missing or invalid.
+- AI fallback responses label unavailable sensor readings instead of inventing AQI or weather values.
 
 - **Zero Key Leaks**: All external APIs (OpenAI, OpenWeatherMap) are accessed strictly from the backend; no sensitive keys are exposed to the client bundle.
 - **Rate Limiting**: Protects API endpoints against DDoS and automated brute-force attacks.
