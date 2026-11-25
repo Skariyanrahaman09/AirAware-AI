@@ -1,12 +1,15 @@
 import React from 'react';
 import { ShieldCheck, AlertTriangle, AlertOctagon, Skull } from 'lucide-react';
 
-export default function AqiGauge({ aqi = 180, severity = 'Unhealthy', category = 'Unhealthy', color = '#EF4444' }) {
+export default function AqiGauge({ aqi, severity = 'Unavailable', category = 'Unavailable', color = '#64748B' }) {
+  const hasReading = typeof aqi === 'number' && Number.isFinite(aqi);
+  const displayedAqi = hasReading ? aqi : null;
   // Normalize AQI to scale 0 - 500 (angle from -90 to +90 degrees)
-  const clampedAqi = Math.min(500, Math.max(0, aqi));
+  const clampedAqi = hasReading ? Math.min(500, Math.max(0, aqi)) : 0;
   const rotation = -90 + (clampedAqi / 500) * 180;
 
   const getSeverityIcon = () => {
+    if (!hasReading) return <AlertTriangle className="w-5 h-5 text-slate-500" />;
     if (aqi <= 50) return <ShieldCheck className="w-5 h-5 text-emerald-600" />;
     if (aqi <= 100) return <ShieldCheck className="w-5 h-5 text-amber-500" />;
     if (aqi <= 150) return <AlertTriangle className="w-5 h-5 text-orange-500" />;
@@ -27,7 +30,7 @@ export default function AqiGauge({ aqi = 180, severity = 'Unhealthy', category =
 
       <div className="relative w-64 h-36 flex items-end justify-center">
         {/* SVG Gauge Arc */}
-        <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible">
+        <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible" role="img" aria-label={hasReading ? `Air Quality Index ${aqi}` : "Air Quality Index unavailable"}>
           {/* Segments: Good, Moderate, USG, Unhealthy, Very Unhealthy, Hazardous */}
           {/* Background Arc */}
           <path
@@ -62,7 +65,7 @@ export default function AqiGauge({ aqi = 180, severity = 'Unhealthy', category =
 
         {/* Centered Large AQI Display */}
         <div className="absolute bottom-0 text-center">
-          <div className="text-4xl font-extrabold text-slate-900 tracking-tight leading-none">{aqi}</div>
+          <div className="text-4xl font-extrabold text-slate-900 tracking-tight leading-none">{displayedAqi ?? 'N/A'}</div>
           <div className="text-[11px] font-bold text-slate-500 tracking-widest uppercase mt-0.5">Air Quality Index</div>
         </div>
       </div>
@@ -76,7 +79,7 @@ export default function AqiGauge({ aqi = 180, severity = 'Unhealthy', category =
         }}
       >
         {getSeverityIcon()}
-        <span>{severity}</span>
+        <span>{hasReading ? severity : 'Reading unavailable'}</span>
       </div>
     </div>
   );
