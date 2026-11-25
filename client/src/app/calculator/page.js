@@ -130,42 +130,47 @@ export default function CalculatorPage() {
           {/* Commute Distance */}
           <div>
             <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
-              <span>Daily Round-Trip Distance</span>
+              <label htmlFor="commute-distance-range">Daily Round-Trip Distance</label>
               <span className="font-black text-emerald-700">{commuteDistanceKm} km / day</span>
             </div>
             <input
+              id="commute-distance-range"
               type="range"
               min={1}
               max={100}
               value={commuteDistanceKm}
+              aria-label="Daily Round-Trip Distance in kilometers"
               onChange={(e) => setCommuteDistanceKm(e.target.value)}
-              className="w-full accent-emerald-600"
+              className="w-full accent-emerald-600 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
           </div>
 
           {/* Days Per Week */}
           <div>
             <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
-              <span>Active Commute Days per Week</span>
+              <label htmlFor="commute-days-range">Active Commute Days per Week</label>
               <span className="font-black text-emerald-700">{daysPerWeek} days / week</span>
             </div>
             <input
+              id="commute-days-range"
               type="range"
               min={1}
               max={7}
               value={daysPerWeek}
+              aria-label="Active Commute Days per Week"
               onChange={(e) => setDaysPerWeek(e.target.value)}
-              className="w-full accent-emerald-600"
+              className="w-full accent-emerald-600 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
           </div>
 
           {/* Current Vehicle Mode */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Current Vehicle Mode</label>
+            <label htmlFor="calc-current-mode" className="block text-xs font-semibold text-slate-700 mb-1">Current Vehicle Mode</label>
             <select
+              id="calc-current-mode"
               value={currentMode}
               onChange={(e) => setCurrentMode(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
+              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
               <option value="personal_car">Personal Car (Petrol / Diesel)</option>
               <option value="motorcycle_scooter">Motorcycle / Scooter</option>
@@ -176,11 +181,12 @@ export default function CalculatorPage() {
 
           {/* Alternative Shift Mode */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Proposed Sustainable Shift</label>
+            <label htmlFor="calc-alt-mode" className="block text-xs font-semibold text-slate-700 mb-1">Proposed Sustainable Shift</label>
             <select
+              id="calc-alt-mode"
               value={alternativeMode}
               onChange={(e) => setAlternativeMode(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium"
+              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
               <option value="public_transit">Public Transit (Electric Rail / Bus)</option>
               <option value="carpool">Carpooling with Neighbors</option>
@@ -192,16 +198,18 @@ export default function CalculatorPage() {
           {alternativeMode === 'carpool' && (
             <div>
               <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
-                <span>Carpool Passengers Sharing Vehicle</span>
+                <label htmlFor="carpool-occupancy-range">Carpool Passengers Sharing Vehicle</label>
                 <span className="font-black text-emerald-700">{carpoolOccupancy} occupants</span>
               </div>
               <input
+                id="carpool-occupancy-range"
                 type="range"
                 min={2}
                 max={5}
                 value={carpoolOccupancy}
+                aria-label="Carpool Passengers Sharing Vehicle"
                 onChange={(e) => setCarpoolOccupancy(e.target.value)}
-                className="w-full accent-emerald-600"
+                className="w-full accent-emerald-600 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
               />
             </div>
           )}

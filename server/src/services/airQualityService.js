@@ -3,6 +3,15 @@ const axios = require('axios');
 // In-memory cache for API responses (Key: cacheKey, Value: { data, timestamp })
 const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for real-time freshness
+const MAX_CACHE_ENTRIES = 200;
+
+function setBoundedCache(key, value) {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey) cache.delete(oldestKey);
+  }
+  cache.set(key, value);
+}
 
 /**
  * Standard EPA AQI Breakpoints for PM2.5 (µg/m³)
@@ -21,7 +30,126 @@ function calculateAqiFromPm25(pm25) {
 }
 
 /**
- * Severity determination & guidance mapping
+ * Official Central Pollution Control Board (CPCB) NAQI Calculation (India)
+ * Follows CPCB National Air Quality Index methodology for PM2.5 and PM10 sub-indices
+ */
+function calculateCpcbSubIndex(conc, breakpoints) {
+  if (conc == null || isNaN(conc) || conc < 0) return null;
+  for (const bp of breakpoints) {
+    if (conc >= bp.bLo && conc <= bp.bHi) {
+      return Math.round(((bp.iHi - bp.iLo) / (bp.bHi - bp.bLo)) * (conc - bp.bLo) + bp.iLo);
+    }
+  }
+  const last = breakpoints[breakpoints.length - 1];
+  return Math.min(500, Math.round(last.iHi + (conc - last.bHi) * 0.4));
+}
+
+function calculateCpcbAqi(pm25, pm10) {
+  const pm25Breakpoints = [
+    { bLo: 0, bHi: 30, iLo: 0, iHi: 50 },
+    { bLo: 31, bHi: 60, iLo: 51, iHi: 100 },
+    { bLo: 61, bHi: 90, iLo: 101, iHi: 200 },
+    { bLo: 91, bHi: 120, iLo: 201, iHi: 300 },
+    { bLo: 121, bHi: 250, iLo: 301, iHi: 400 },
+    { bLo: 251, bHi: 400, iLo: 401, iHi: 500 },
+  ];
+
+  const pm10Breakpoints = [
+    { bLo: 0, bHi: 50, iLo: 0, iHi: 50 },
+    { bLo: 51, bHi: 100, iLo: 51, iHi: 100 },
+    { bLo: 101, bHi: 250, iLo: 101, iHi: 200 },
+    { bLo: 251, bHi: 350, iLo: 201, iHi: 300 },
+    { bLo: 351, bHi: 430, iLo: 301, iHi: 400 },
+    { bLo: 431, bHi: 500, iLo: 401, iHi: 500 },
+  ];
+
+  const sub25 = calculateCpcbSubIndex(pm25, pm25Breakpoints);
+  const sub10 = calculateCpcbSubIndex(pm10, pm10Breakpoints);
+
+  if (sub25 != null && sub10 != null) return Math.max(sub25, sub10);
+  if (sub25 != null) return sub25;
+  if (sub10 != null) return sub10;
+  return 50;
+}
+
+function getCpcbSeverityInfo(aqi) {
+  if (aqi <= 50) {
+    return {
+      severity: 'Good',
+      category: 'Good',
+      color: '#10B981',
+      colorCode: 'green',
+      standardName: 'India CPCB NAQI',
+      healthGuidance: 'Minimal health impact. Air quality is clean and poses virtually zero threat.',
+      maskRecommended: false,
+      purifierRecommended: false,
+      outdoorExercise: 'Safe',
+    };
+  } else if (aqi <= 100) {
+    return {
+      severity: 'Satisfactory',
+      category: 'Satisfactory',
+      color: '#84CC16',
+      colorCode: 'lime',
+      standardName: 'India CPCB NAQI',
+      healthGuidance: 'Minor breathing discomfort may be felt by sensitive people with pre-existing conditions.',
+      maskRecommended: false,
+      purifierRecommended: false,
+      outdoorExercise: 'Acceptable',
+    };
+  } else if (aqi <= 200) {
+    return {
+      severity: 'Moderate',
+      category: 'Moderate',
+      color: '#FBBF24',
+      colorCode: 'yellow',
+      standardName: 'India CPCB NAQI',
+      healthGuidance: 'Breathing discomfort to people with asthma, lung, and heart diseases.',
+      maskRecommended: true,
+      purifierRecommended: true,
+      outdoorExercise: 'Limit intense physical exertion',
+    };
+  } else if (aqi <= 300) {
+    return {
+      severity: 'Poor',
+      category: 'Poor',
+      color: '#F97316',
+      colorCode: 'orange',
+      standardName: 'India CPCB NAQI',
+      healthGuidance: 'Breathing discomfort to most people on prolonged outdoor exposure.',
+      maskRecommended: true,
+      purifierRecommended: true,
+      outdoorExercise: 'Avoid outdoor morning workouts',
+    };
+  } else if (aqi <= 400) {
+    return {
+      severity: 'Very Poor',
+      category: 'Very Poor',
+      color: '#EF4444',
+      colorCode: 'red',
+      standardName: 'India CPCB NAQI',
+      healthGuidance: 'Respiratory illness on prolonged exposure. Significant risk for children and seniors.',
+      maskRecommended: true,
+      purifierRecommended: true,
+      outdoorExercise: 'Avoid all outdoor exertion',
+    };
+  } else {
+    return {
+      severity: 'Severe',
+      category: 'Severe',
+      color: '#881337',
+      colorCode: 'maroon',
+      standardName: 'India CPCB NAQI',
+      healthGuidance: 'Affects healthy people and seriously impacts those with existing cardiopulmonary conditions.',
+      maskRecommended: true,
+      purifierRecommended: true,
+      outdoorExercise: 'Emergency: Remain strictly indoors',
+    };
+  }
+}
+
+/**
+ * Severity determination & guidance mapping (US EPA standard)
  */
 function getSeverityInfo(aqi) {
   if (aqi <= 50) {
@@ -30,6 +158,7 @@ function getSeverityInfo(aqi) {
       color: '#10B981', // Green
       colorCode: 'green',
       category: 'Good',
+      standardName: 'US EPA AQI',
       healthGuidance: 'Air quality is satisfactory and poses little or no risk. Safe for outdoor activities and fresh-air ventilation.',
       maskRecommended: false,
       purifierRecommended: false,
@@ -41,6 +170,7 @@ function getSeverityInfo(aqi) {
       color: '#FBBF24', // Yellow
       colorCode: 'yellow',
       category: 'Moderate',
+      standardName: 'US EPA AQI',
       healthGuidance: 'Air quality is acceptable. Unusually sensitive individuals may experience minor respiratory symptoms.',
       maskRecommended: false,
       purifierRecommended: false,
@@ -52,6 +182,7 @@ function getSeverityInfo(aqi) {
       color: '#F97316', // Orange
       colorCode: 'orange',
       category: 'Unhealthy for Sensitive Groups',
+      standardName: 'US EPA AQI',
       healthGuidance: 'Children, seniors, and people with respiratory or heart conditions should limit prolonged outdoor exertion.',
       maskRecommended: true,
       purifierRecommended: true,
@@ -63,6 +194,7 @@ function getSeverityInfo(aqi) {
       color: '#EF4444', // Red
       colorCode: 'red',
       category: 'Unhealthy',
+      standardName: 'US EPA AQI',
       healthGuidance: 'Everyone may begin to experience health effects; sensitive groups may experience more serious health effects. Keep windows sealed.',
       maskRecommended: true,
       purifierRecommended: true,
@@ -74,6 +206,7 @@ function getSeverityInfo(aqi) {
       color: '#8B5CF6', // Purple
       colorCode: 'purple',
       category: 'Very Unhealthy',
+      standardName: 'US EPA AQI',
       healthGuidance: 'Health alert: Risk of health effects is elevated for everyone. Wear N95 respirator if stepping outside. Run HEPA filtration indoors.',
       maskRecommended: true,
       purifierRecommended: true,
@@ -85,6 +218,7 @@ function getSeverityInfo(aqi) {
       color: '#881337', // Maroon
       colorCode: 'maroon',
       category: 'Hazardous',
+      standardName: 'US EPA AQI',
       healthGuidance: 'Emergency health warning: Entire population is likely to be affected. Remain strictly indoors with air filtration.',
       maskRecommended: true,
       purifierRecommended: true,
@@ -322,7 +456,7 @@ async function geocodeCity(cityName) {
 /**
  * Fetch current air quality & weather for ANY city or GPS coordinates in the world
  */
-async function getCurrentAirQuality({ city, lat, lon }) {
+async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) {
   let locationInfo = { name: city || 'My Location', lat, lon, country: '' };
 
   // Case 1: Coordinates provided (e.g. from GPS / Real-Time Location)
@@ -346,11 +480,13 @@ async function getCurrentAirQuality({ city, lat, lon }) {
   if (cache.has(cacheKey)) {
     const cached = cache.get(cacheKey);
     if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      // Keep exact requested name if specified
+      const cachedData = { ...cached.data };
       if (city && city.toLowerCase() !== 'delhi') {
-        cached.data.city = city;
+        cachedData.city = city;
       }
-      return cached.data;
+      cachedData.provenance = 'cached';
+      cachedData.provenanceDescription = 'Cached high-accuracy telemetry (5-min TTL)';
+      return cachedData;
     }
   }
 
@@ -384,10 +520,21 @@ async function getCurrentAirQuality({ city, lat, lon }) {
     const aqiCur = aqiRes.data?.current || {};
     const weatherCur = weatherRes.data?.current || {};
 
-    const pm25 = aqiCur.pm2_5 !== undefined ? Math.round(aqiCur.pm2_5 * 10) / 10 : 38.0;
-    const pm10 = aqiCur.pm10 !== undefined ? Math.round(aqiCur.pm10 * 10) / 10 : 65.0;
-    const computedAqi = aqiCur.us_aqi || calculateAqiFromPm25(pm25);
-    const severityInfo = getSeverityInfo(computedAqi);
+    const pm25 = aqiCur.pm2_5 !== undefined && aqiCur.pm2_5 !== null ? Math.round(aqiCur.pm2_5 * 10) / 10 : null;
+    const pm10 = aqiCur.pm10 !== undefined && aqiCur.pm10 !== null ? Math.round(aqiCur.pm10 * 10) / 10 : null;
+
+    // Calculate both standards mathematically
+    const epaAqi = aqiCur.us_aqi || (pm25 != null ? calculateAqiFromPm25(pm25) : 50);
+    const cpcbAqi = calculateCpcbAqi(pm25, pm10);
+
+    const epaInfo = getSeverityInfo(epaAqi);
+    const cpcbInfo = getCpcbSeverityInfo(cpcbAqi);
+
+    // Auto-detect standard: India defaults to CPCB NAQI, international defaults to US EPA
+    const isIndia = locationInfo.country === 'India' || (locationInfo.name && ['Delhi', 'Kolkata', 'Mumbai', 'Bengaluru', 'Chennai', 'Hyderabad', 'Lucknow', 'Patna', 'Pune', 'Ahmedabad', 'Jaipur', 'Varanasi', 'Chandigarh'].includes(locationInfo.name));
+    const activeStandard = standard === 'cpcb' ? 'IN_CPCB' : standard === 'epa' ? 'US_EPA' : isIndia ? 'IN_CPCB' : 'US_EPA';
+    const activeInfo = activeStandard === 'IN_CPCB' ? cpcbInfo : epaInfo;
+    const activeAqi = activeStandard === 'IN_CPCB' ? cpcbAqi : epaAqi;
 
     const weatherCode = weatherCur.weather_code || 0;
     let weatherCondition = 'Clear';
@@ -400,40 +547,64 @@ async function getCurrentAirQuality({ city, lat, lon }) {
       city: locationInfo.name,
       country: locationInfo.country,
       coordinates: { lat, lon },
-      aqi: computedAqi,
-      severity: severityInfo.severity,
-      category: severityInfo.category,
-      color: severityInfo.color,
-      colorCode: severityInfo.colorCode,
-      healthGuidance: severityInfo.healthGuidance,
-      maskRecommended: severityInfo.maskRecommended,
-      purifierRecommended: severityInfo.purifierRecommended,
-      outdoorExercise: severityInfo.outdoorExercise,
+      aqi: activeAqi,
+      severity: activeInfo.severity,
+      category: activeInfo.category,
+      color: activeInfo.color,
+      colorCode: activeInfo.colorCode,
+      healthGuidance: activeInfo.healthGuidance,
+      maskRecommended: activeInfo.maskRecommended,
+      purifierRecommended: activeInfo.purifierRecommended,
+      outdoorExercise: activeInfo.outdoorExercise,
+      standard: activeStandard === 'IN_CPCB' ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)',
+      activeStandard,
+      standards: {
+        active: activeStandard,
+        epa: {
+          aqi: epaAqi,
+          severity: epaInfo.severity,
+          category: epaInfo.category,
+          color: epaInfo.color,
+          colorCode: epaInfo.colorCode,
+          standardName: 'US EPA AQI',
+        },
+        cpcb: {
+          aqi: cpcbAqi,
+          severity: cpcbInfo.severity,
+          category: cpcbInfo.category,
+          color: cpcbInfo.color,
+          colorCode: cpcbInfo.colorCode,
+          standardName: 'India CPCB NAQI',
+        },
+      },
+      // Never fabricate readings: null if unavailable from sensor
       pollutants: {
         pm25: pm25,
         pm10: pm10,
-        co: aqiCur.carbon_monoxide !== undefined ? Math.round(aqiCur.carbon_monoxide) : 550,
-        no2: aqiCur.nitrogen_dioxide !== undefined ? Math.round(aqiCur.nitrogen_dioxide * 10) / 10 : 36,
-        so2: aqiCur.sulphur_dioxide !== undefined ? Math.round(aqiCur.sulphur_dioxide * 10) / 10 : 12,
-        o3: aqiCur.ozone !== undefined ? Math.round(aqiCur.ozone * 10) / 10 : 38,
+        co: aqiCur.carbon_monoxide !== undefined && aqiCur.carbon_monoxide !== null ? Math.round(aqiCur.carbon_monoxide) : null,
+        no2: aqiCur.nitrogen_dioxide !== undefined && aqiCur.nitrogen_dioxide !== null ? Math.round(aqiCur.nitrogen_dioxide * 10) / 10 : null,
+        so2: aqiCur.sulphur_dioxide !== undefined && aqiCur.sulphur_dioxide !== null ? Math.round(aqiCur.sulphur_dioxide * 10) / 10 : null,
+        o3: aqiCur.ozone !== undefined && aqiCur.ozone !== null ? Math.round(aqiCur.ozone * 10) / 10 : null,
       },
       weather: {
-        temperature: Math.round(weatherCur.temperature_2m || 22),
-        humidity: Math.round(weatherCur.relative_humidity_2m || 60),
-        windSpeedKmH: Math.round(weatherCur.wind_speed_10m || 9),
+        temperature: weatherCur.temperature_2m !== undefined && weatherCur.temperature_2m !== null ? Math.round(weatherCur.temperature_2m) : null,
+        humidity: weatherCur.relative_humidity_2m !== undefined && weatherCur.relative_humidity_2m !== null ? Math.round(weatherCur.relative_humidity_2m) : null,
+        windSpeedKmH: weatherCur.wind_speed_10m !== undefined && weatherCur.wind_speed_10m !== null ? Math.round(weatherCur.wind_speed_10m) : null,
         condition: weatherCondition,
       },
       hourlyTrends: (aqiRes.data?.hourly?.time || []).slice(0, 24).map((t, idx) => ({
         time: new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }),
-        pm25: Math.round(aqiRes.data.hourly.pm2_5?.[idx] || pm25),
-        aqi: Math.round(aqiRes.data.hourly.us_aqi?.[idx] || computedAqi),
+        pm25: aqiRes.data.hourly.pm2_5?.[idx] !== undefined ? Math.round(aqiRes.data.hourly.pm2_5[idx]) : pm25,
+        aqi: aqiRes.data.hourly.us_aqi?.[idx] !== undefined ? Math.round(aqiRes.data.hourly.us_aqi[idx]) : activeAqi,
       })),
+      provenance: 'live',
+      provenanceDescription: 'Live atmospheric sensor telemetry via Open-Meteo',
       isSimulated: false,
       isLive: true,
       lastUpdated: new Date().toISOString(),
     };
 
-    cache.set(cacheKey, { data: result, timestamp: Date.now() });
+    setBoundedCache(cacheKey, { data: result, timestamp: Date.now() });
     return result;
   } catch (err) {
     console.warn(`[AirQualityService] Live Open-Meteo query failed (${err.message}). Using calibrated regional model for ${locationInfo.name}.`);
@@ -460,7 +631,16 @@ async function getCurrentAirQuality({ city, lat, lon }) {
 
     const displayName = locationInfo.name || matchedCity.city;
     const displayCountry = locationInfo.country || matchedCity.country;
-    const severityInfo = getSeverityInfo(matchedCity.aqi);
+
+    const epaAqi = matchedCity.aqi || calculateAqiFromPm25(matchedCity.pm25);
+    const cpcbAqi = calculateCpcbAqi(matchedCity.pm25, matchedCity.pm10);
+    const epaInfo = getSeverityInfo(epaAqi);
+    const cpcbInfo = getCpcbSeverityInfo(cpcbAqi);
+
+    const isIndia = displayCountry === 'India';
+    const activeStandard = standard === 'cpcb' ? 'IN_CPCB' : standard === 'epa' ? 'US_EPA' : isIndia ? 'IN_CPCB' : 'US_EPA';
+    const activeInfo = activeStandard === 'IN_CPCB' ? cpcbInfo : epaInfo;
+    const activeAqi = activeStandard === 'IN_CPCB' ? cpcbAqi : epaAqi;
 
     // Generate realistic hourly trends
     const hourly = [];
@@ -469,7 +649,7 @@ async function getCurrentAirQuality({ city, lat, lon }) {
       const h = (baseHour + i) % 24;
       const isPeakSmogHour = (h >= 5 && h <= 9) || (h >= 20 && h <= 23);
       const varFactor = isPeakSmogHour ? 1.22 : 0.88;
-      const hourAqi = Math.round(matchedCity.aqi * varFactor);
+      const hourAqi = Math.round(activeAqi * varFactor);
       const hourPm25 = Math.round(matchedCity.pm25 * varFactor);
       const label = `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}`;
       hourly.push({ time: label, aqi: hourAqi, pm25: hourPm25 });
@@ -479,15 +659,36 @@ async function getCurrentAirQuality({ city, lat, lon }) {
       city: displayName,
       country: displayCountry,
       coordinates: { lat, lon },
-      aqi: matchedCity.aqi,
-      severity: severityInfo.severity,
-      category: severityInfo.category,
-      color: severityInfo.color,
-      colorCode: severityInfo.colorCode,
-      healthGuidance: severityInfo.healthGuidance,
-      maskRecommended: severityInfo.maskRecommended,
-      purifierRecommended: severityInfo.purifierRecommended,
-      outdoorExercise: severityInfo.outdoorExercise,
+      aqi: activeAqi,
+      severity: activeInfo.severity,
+      category: activeInfo.category,
+      color: activeInfo.color,
+      colorCode: activeInfo.colorCode,
+      healthGuidance: activeInfo.healthGuidance,
+      maskRecommended: activeInfo.maskRecommended,
+      purifierRecommended: activeInfo.purifierRecommended,
+      outdoorExercise: activeInfo.outdoorExercise,
+      standard: activeStandard === 'IN_CPCB' ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)',
+      activeStandard,
+      standards: {
+        active: activeStandard,
+        epa: {
+          aqi: epaAqi,
+          severity: epaInfo.severity,
+          category: epaInfo.category,
+          color: epaInfo.color,
+          colorCode: epaInfo.colorCode,
+          standardName: 'US EPA AQI',
+        },
+        cpcb: {
+          aqi: cpcbAqi,
+          severity: cpcbInfo.severity,
+          category: cpcbInfo.category,
+          color: cpcbInfo.color,
+          colorCode: cpcbInfo.colorCode,
+          standardName: 'India CPCB NAQI',
+        },
+      },
       pollutants: {
         pm25: matchedCity.pm25,
         pm10: matchedCity.pm10,
@@ -503,6 +704,8 @@ async function getCurrentAirQuality({ city, lat, lon }) {
         condition: matchedCity.condition,
       },
       hourlyTrends: hourly,
+      provenance: 'simulated',
+      provenanceDescription: 'Calibrated regional meteorological baseline (fallback model)',
       isSimulated: true,
       isLive: false,
       simulationNotice: `Calibrated real-time model active for ${displayName}. Accurate to local regional meteorological trends.`,
@@ -514,8 +717,8 @@ async function getCurrentAirQuality({ city, lat, lon }) {
 /**
  * Get multi-day forecast trends for any city or GPS coordinates
  */
-async function getForecast({ city = 'Delhi', lat, lon }) {
-  const current = await getCurrentAirQuality({ city, lat, lon });
+async function getForecast({ city = 'Delhi', lat, lon, standard = 'auto' } = {}) {
+  const current = await getCurrentAirQuality({ city, lat, lon, standard });
 
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const todayIndex = new Date().getDay();
@@ -524,8 +727,8 @@ async function getForecast({ city = 'Delhi', lat, lon }) {
     const dayName = offset === 0 ? 'Today' : days[(todayIndex + offset) % 7];
     const variance = [1.0, 1.06, 0.94, 0.88, 1.04][offset];
     const dayAqi = Math.min(500, Math.max(25, Math.round(current.aqi * variance)));
-    const dayPm25 = Math.round(current.pollutants.pm25 * variance);
-    const sev = getSeverityInfo(dayAqi);
+    const dayPm25 = current.pollutants.pm25 != null ? Math.round(current.pollutants.pm25 * variance) : null;
+    const sev = current.activeStandard === 'IN_CPCB' ? getCpcbSeverityInfo(dayAqi) : getSeverityInfo(dayAqi);
 
     return {
       day: dayName,
@@ -552,7 +755,10 @@ module.exports = {
   getCurrentAirQuality,
   getForecast,
   calculateAqiFromPm25,
+  calculateCpcbAqi,
   getSeverityInfo,
+  getEpaSeverityInfo: getSeverityInfo,
+  getCpcbSeverityInfo,
   geocodeCity,
   reverseGeocode,
   searchWorldCities,

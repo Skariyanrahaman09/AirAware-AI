@@ -1,7 +1,14 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'airaware_ai_secure_jwt_secret_dev_2026';
+const getJwtSecret = () => {
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('FATAL SECURITY ERROR: JWT_SECRET must be explicitly defined in production.');
+  }
+  return process.env.JWT_SECRET || 'airaware_ai_secure_jwt_secret_dev_2026';
+};
+
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Authentication middleware to verify JWT token
@@ -24,12 +31,18 @@ const requireAuth = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authentication token payload.',
+      });
+    }
 
+    const user = await User.findById(decoded.id).select('-password');
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'User account not found.',
+        message: 'User account not found or has been deactivated.',
       });
     }
 
@@ -39,7 +52,6 @@ const requireAuth = async (req, res, next) => {
     return res.status(401).json({
       success: false,
       message: 'Invalid or expired authentication token.',
-      error: err.message,
     });
   }
 };

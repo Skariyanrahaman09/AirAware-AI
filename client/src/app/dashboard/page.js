@@ -39,6 +39,8 @@ export default function DashboardPage() {
     error,
     selectedCity,
     coordinates,
+    activeStandard,
+    changeStandard,
     changeCity,
     enableRealTimeGps,
     isRealTimeGps,
@@ -131,11 +133,61 @@ export default function DashboardPage() {
 
         {/* Real-Time Live Mode Controls */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {/* Calculation Standard Toggle */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold" role="group" aria-label="AQI Calculation Standard">
+            <span className="text-[11px] text-slate-500 px-1.5 hidden xl:inline">Standard:</span>
+            <button
+              type="button"
+              onClick={() => changeStandard('auto')}
+              className={`px-2.5 py-1 rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
+                activeStandard === 'auto'
+                  ? 'bg-white text-emerald-700 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              aria-pressed={activeStandard === 'auto'}
+            >
+              Auto
+            </button>
+            <button
+              type="button"
+              onClick={() => changeStandard('cpcb')}
+              className={`px-2.5 py-1 rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
+                activeStandard === 'cpcb'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              aria-pressed={activeStandard === 'cpcb'}
+            >
+              CPCB (India)
+            </button>
+            <button
+              type="button"
+              onClick={() => changeStandard('epa')}
+              className={`px-2.5 py-1 rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
+                activeStandard === 'epa'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              aria-pressed={activeStandard === 'epa'}
+            >
+              US EPA
+            </button>
+          </div>
+
           {/* Autocomplete City Search */}
           <div ref={searchContainerRef} className="relative flex-1 md:w-64">
             <form onSubmit={handleCitySubmit}>
+              <label htmlFor="dashboard-city-search" className="sr-only">
+                Search any city worldwide
+              </label>
               <input
+                id="dashboard-city-search"
                 type="text"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showSuggestions && suggestions.length > 0}
+                aria-controls="dashboard-city-listbox"
+                aria-haspopup="listbox"
                 value={cityInput}
                 onFocus={() => setShowSuggestions(true)}
                 onChange={(e) => {
@@ -143,18 +195,25 @@ export default function DashboardPage() {
                   setShowSuggestions(true);
                 }}
                 placeholder="Search any city worldwide..."
-                className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs font-medium"
+                className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-2xs font-medium"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
             </form>
 
             {/* Autocomplete Dropdown */}
             {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden divide-y divide-slate-100 text-xs">
+              <div
+                id="dashboard-city-listbox"
+                role="listbox"
+                aria-label="City suggestions"
+                className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden divide-y divide-slate-100 text-xs"
+              >
                 {suggestions.map((item, idx) => (
                   <button
                     key={idx}
                     type="button"
+                    role="option"
+                    aria-selected="false"
                     onClick={() => handleSelectSuggestion(item)}
                     className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-emerald-50 transition-colors"
                   >
@@ -175,7 +234,8 @@ export default function DashboardPage() {
           <button
             onClick={enableRealTimeGps}
             title="Detect My Live GPS Location"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs ${
+            aria-label="Detect My Live GPS Location"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
               isRealTimeGps
                 ? 'bg-emerald-600 text-white shadow-emerald-500/20'
                 : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-300 hover:text-emerald-700'
@@ -189,7 +249,8 @@ export default function DashboardPage() {
           <button
             onClick={toggleLivePolling}
             title={isLivePolling ? 'Real-Time Auto-Refresh Active (30s)' : 'Real-Time Auto-Refresh Paused'}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+            aria-label={isLivePolling ? 'Real-Time Auto-Refresh Active (30 seconds)' : 'Real-Time Auto-Refresh Paused'}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
               isLivePolling
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
                 : 'bg-white border-slate-300 text-slate-600'
@@ -209,7 +270,8 @@ export default function DashboardPage() {
             onClick={refreshAirQuality}
             disabled={loading}
             title="Refresh Station Data Now"
-            className="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold shadow-2xs transition-colors"
+            aria-label="Refresh Station Data Now"
+            className="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold shadow-2xs transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
           </button>
@@ -362,6 +424,49 @@ export default function DashboardPage() {
                 category={airData.category}
                 color={airData.color}
               />
+            </div>
+
+            {/* Scientific Standard Transparency */}
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700">Calculation Standard:</span>
+                <span className="px-2 py-0.5 rounded-full font-extrabold text-[11px] bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  {airData.activeStandard === 'IN_CPCB' ? 'CPCB NAQI (India)' : 'US EPA (Global)'}
+                </span>
+              </div>
+
+              {airData.standards?.cpcb && airData.standards?.epa && (
+                <div className="grid grid-cols-2 gap-2 pt-1 text-center">
+                  <div
+                    className={`p-2 rounded-xl border text-xs transition-all ${
+                      airData.activeStandard === 'IN_CPCB'
+                        ? 'bg-white border-emerald-400 shadow-2xs font-bold'
+                        : 'bg-slate-100/60 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <div className="text-[10px] text-slate-500 uppercase font-bold">CPCB NAQI</div>
+                    <div className="text-lg font-black text-slate-900">{airData.standards.cpcb.aqi} AQI</div>
+                    <div className="text-[10px] text-emerald-800 font-semibold">{airData.standards.cpcb.category}</div>
+                  </div>
+                  <div
+                    className={`p-2 rounded-xl border text-xs transition-all ${
+                      airData.activeStandard === 'US_EPA'
+                        ? 'bg-white border-emerald-400 shadow-2xs font-bold'
+                        : 'bg-slate-100/60 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <div className="text-[10px] text-slate-500 uppercase font-bold">US EPA</div>
+                    <div className="text-lg font-black text-slate-900">{airData.standards.epa.aqi} AQI</div>
+                    <div className="text-[10px] text-emerald-800 font-semibold">{airData.standards.epa.category}</div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[10px] text-slate-500 leading-normal">
+                {airData.activeStandard === 'IN_CPCB'
+                  ? 'Official Indian Central Pollution Control Board (CPCB) methodology with statutory breakpoint sub-indices.'
+                  : 'United States Environmental Protection Agency (EPA) AQI standard for international consistency.'}
+              </p>
             </div>
 
             {/* Health guidance card */}
@@ -567,6 +672,31 @@ export default function DashboardPage() {
               <div className="h-full flex items-center justify-center text-slate-400">Loading hourly trend chart...</div>
             )}
           </div>
+
+          {/* Accessible Table Equivalent for Screen Readers */}
+          {airData.hourlyTrends && airData.hourlyTrends.length > 0 && (
+            <div className="sr-only">
+              <table aria-label={`Hourly AQI and PM2.5 trend data for ${airData.city}`}>
+                <caption className="sr-only">24-Hour Air Quality and Particulate Matter History</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">AQI</th>
+                    <th scope="col">PM2.5 (µg/m³)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {airData.hourlyTrends.map((pt, i) => (
+                    <tr key={i}>
+                      <td>{pt.time}</td>
+                      <td>{pt.aqi}</td>
+                      <td>{pt.pm25}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

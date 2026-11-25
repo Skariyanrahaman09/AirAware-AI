@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit');
+const { securityHeaders, noSqlSanitizer } = require('./middleware/securityMiddleware');
+const { generalLimiter } = require('./middleware/rateLimiters');
 const { notFoundHandler, errorHandler } = require('./middleware/errorMiddleware');
 
 // Route imports
@@ -14,32 +15,28 @@ const communityRoutes = require('./routes/communityRoutes');
 
 const app = express();
 
-// Security & Parsing Middleware
+// Security Headers (OWASP compliant)
+app.use(securityHeaders);
+
+// CORS configuration (strictly scoped or defaults to local Next.js frontend)
+const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: allowedOrigin === '*' ? '*' : [allowedOrigin, 'http://127.0.0.1:3000', 'http://localhost:3000'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   })
 );
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting (generous in development and skips localhost/health)
-if (process.env.NODE_ENV !== 'test') {
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5000, // generous allowance for smooth frontend navigation & proxying
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: (req) => req.path === '/health' || req.path === '/api/health',
-    message: {
-      success: false,
-      message: 'Too many requests from this IP, please try again after 15 minutes.',
-    },
-  });
-  app.use('/api', limiter);
-}
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// NoSQL query injection sanitizer
+app.use(noSqlSanitizer);
+
+// General Rate Limiting
+app.use('/api', generalLimiter);
 
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {

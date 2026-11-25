@@ -145,14 +145,20 @@ export default function ChatPage() {
             ])
           }
           title="Reset Chat"
-          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition-colors"
+          aria-label="Reset chat history"
+          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+      <div
+        role="log"
+        aria-live="polite"
+        aria-label="Conversation messages"
+        className="flex-1 overflow-y-auto space-y-4 pr-1"
+      >
         {messages.map((msg, index) => {
           const isUser = msg.role === 'user';
           const struct = msg.structuredData;
@@ -281,12 +287,12 @@ export default function ChatPage() {
         })}
 
         {loading && (
-          <div className="flex gap-3 justify-start items-center">
+          <div role="status" aria-live="polite" className="flex gap-3 justify-start items-center">
             <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
-              <Bot className="w-4 h-4 animate-spin" />
+              <Bot className="w-4 h-4 animate-spin" aria-hidden="true" />
             </div>
             <div className="p-3.5 rounded-2xl bg-white border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" aria-hidden="true"></span>
               <span>Analyzing live AQI and synthesizing personalized guidance...</span>
             </div>
           </div>
@@ -303,7 +309,7 @@ export default function ChatPage() {
             key={idx}
             onClick={() => handleSend(prompt)}
             disabled={loading}
-            className="px-3 py-1 rounded-full bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-300 transition-colors shrink-0 shadow-2xs font-medium"
+            className="px-3 py-1 rounded-full bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-300 transition-colors shrink-0 shadow-2xs font-medium focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
           >
             {prompt}
           </button>
@@ -312,20 +318,23 @@ export default function ChatPage() {
 
       {/* Input Form */}
       <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
+        <label htmlFor="chat-input" className="sr-only">Ask an environmental question</label>
         <input
+          id="chat-input"
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a question (e.g., Can I take my kids to the park today?)..."
-          className="flex-1 px-4 py-3 bg-white rounded-2xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
+          className="flex-1 px-4 py-3 bg-white rounded-2xl border border-slate-300 text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-xs"
         />
         <button
           type="submit"
           disabled={loading || !input.trim()}
-          className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+          aria-label="Send question"
+          className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition-colors disabled:opacity-50 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
         >
           <span>Send</span>
-          <Send className="w-4 h-4" />
+          <Send className="w-4 h-4" aria-hidden="true" />
         </button>
       </form>
     </div>

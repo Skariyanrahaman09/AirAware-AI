@@ -6,7 +6,7 @@ const airQualityService = require('../services/airQualityService');
  */
 const getCurrentAirQuality = async (req, res, next) => {
   try {
-    const { city, lat, lon } = req.query;
+    const { city, lat, lon, standard } = req.query;
     const parsedLat = lat ? parseFloat(lat) : undefined;
     const parsedLon = lon ? parseFloat(lon) : undefined;
 
@@ -14,6 +14,7 @@ const getCurrentAirQuality = async (req, res, next) => {
       city: city || undefined,
       lat: parsedLat,
       lon: parsedLon,
+      standard: standard ? String(standard).toLowerCase() : undefined,
     });
 
     res.json({
@@ -27,11 +28,11 @@ const getCurrentAirQuality = async (req, res, next) => {
 
 /**
  * GET /api/air-quality/forecast
- * Query params: city, lat, lon
+ * Query params: city, lat, lon, standard
  */
 const getForecast = async (req, res, next) => {
   try {
-    const { city, lat, lon } = req.query;
+    const { city, lat, lon, standard } = req.query;
     const parsedLat = lat ? parseFloat(lat) : undefined;
     const parsedLon = lon ? parseFloat(lon) : undefined;
 
@@ -39,6 +40,7 @@ const getForecast = async (req, res, next) => {
       city: city || 'Delhi',
       lat: parsedLat,
       lon: parsedLon,
+      standard: standard ? String(standard).toLowerCase() : undefined,
     });
 
     res.json({

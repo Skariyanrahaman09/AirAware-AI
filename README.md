@@ -1,7 +1,9 @@
 # AirAware AI – Smart Winter Smog & Air Pollution Assistant
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-AirAware--AI-emerald?style=flat&logo=github)](https://github.com/Skariyanrahaman09/AirAware-AI)
-[![Tests Passing](https://img.shields.io/badge/Tests-44%20passed%20(100%25)-brightgreen?style=flat&logo=jest)](tests/)
+[![Tests Passing](https://img.shields.io/badge/Tests-74%20passed%20(100%25)-brightgreen?style=flat&logo=jest)](server/tests/)
+[![CI Pipeline](https://img.shields.io/badge/CI-GitHub%20Actions-blue?style=flat&logo=github-actions)](.github/workflows/ci.yml)
+[![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-success?style=flat)](client/src/components/)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?style=flat&logo=node.js)](https://nodejs.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=flat&logo=tailwindcss)](https://tailwindcss.com/)
@@ -91,6 +93,9 @@ AirAware AI acts as an intelligent environmental health assistant that provides 
 
 ```
 Promptwar- 6/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                   # Automated CI quality pipeline
 ├── server/
 │   ├── src/
 │   │   ├── config/
@@ -118,23 +123,29 @@ Promptwar- 6/
 │   │   │   ├── impactRoutes.js
 │   │   │   └── routineRoutes.js
 │   │   ├── services/
-│   │   │   ├── airQualityService.js  # Open-Meteo & OpenWeatherMap + caching
+│   │   │   ├── airQualityService.js  # CPCB NAQI + US EPA dual-standard air quality
 │   │   │   ├── impactCalculator.js   # Empirical emission & fuel calculator
 │   │   │   ├── openaiService.js      # GPT reasoning & structured response
 │   │   │   └── recommendationService.js # 4-block routines & DIY guides
 │   │   ├── middleware/
-│   │   │   ├── authMiddleware.js
-│   │   │   └── errorMiddleware.js
+│   │   │   ├── authMiddleware.js     # JWT authentication & route protection
+│   │   │   ├── errorMiddleware.js    # Production sanitized error handling
+│   │   │   ├── rateLimiters.js       # Dedicated auth, AI & general rate limiters
+│   │   │   ├── securityMiddleware.js # OWASP security headers & NoSQL injection sanitizer
+│   │   │   └── validationMiddleware.js # Strict API input validation schemas
 │   │   ├── utils/
-│   │   │   └── promptTemplates.js
+│   │   │   └── promptTemplates.js    # Prompt injection defense & contextual framing
 │   │   ├── app.js
 │   │   └── server.js
 │   ├── tests/
 │   │   ├── aiService.test.js
 │   │   ├── airQualityService.test.js
 │   │   ├── api.test.js
+│   │   ├── cpcbAndEnvironmentalAccuracy.test.js
+│   │   ├── externalApiMocking.test.js
 │   │   ├── impactCalculator.test.js
-│   │   └── recommendationService.test.js
+│   │   ├── recommendationService.test.js
+│   │   └── securityAndValidation.test.js
 │   └── package.json
 ├── client/
 │   ├── src/
@@ -208,15 +219,18 @@ Promptwar- 6/
 
 ## 🧪 Running Automated Tests
 
-A comprehensive test suite with 44 automated tests verifies all aspects of backend services, global city geocoding, autocomplete search, EPA breakpoints, emission calculations, routine generation, AI response schema validation, and REST endpoints:
+A comprehensive automated test suite with **74 passing tests across 8 test suites** (100% pass rate) validates all aspects of backend services, security middleware, input validation schemas, prompt sanitization, statutory CPCB NAQI calculation, US EPA breakpoints, deterministic external API mocking, and REST API routes:
 
 ```bash
 cd server
 npm test
 ```
 
-### Test Suite Summary:
-- `tests/api.test.js`: Health check, Air Quality endpoints, Routine generator, Impact calculator, AI chat, Community posts, and Auth registration/login flow.
+### Complete Test Suites:
+- `tests/api.test.js`: Health checks, Air Quality endpoints, Routine generator, Impact calculator, AI chat, Community posts, and Auth registration/login flows.
+- `tests/cpcbAndEnvironmentalAccuracy.test.js`: Indian statutory Central Pollution Control Board (CPCB NAQI) sub-indices calculation across all 6 breakpoint bands (Good, Satisfactory, Moderate, Poor, Very Poor, Severe), EPA vs CPCB distinctions, dual standards response schema, source provenance validation (`live`, `cached`, `simulated`), and sensor telemetry integrity (ensuring absent gases are strictly `null` and never fabricated).
+- `tests/securityAndValidation.test.js`: OWASP security headers (`nosniff`, `DENY`, HSTS, Referrer-Policy, Permissions-Policy), recursive NoSQL query injection sanitizer stripping `$` and `.` operators, input validation middleware (rejecting weak passwords, invalid emails, empty queries, invalid distance ranges), prompt injection defense (`sanitizeQuery`), and production error information leakage prevention.
+- `tests/externalApiMocking.test.js`: Deterministic Open-Meteo & OpenAI API mocking, testing network timeouts, 500 server errors, and verifying robust zero-crash fallbacks.
 - `tests/airQualityService.test.js`: EPA PM2.5 breakpoints calculation (Good, Moderate, USG, Unhealthy, Very Unhealthy, Hazardous), color codes, worldwide geocoding, autocomplete search, and 5-day forecasts.
 - `tests/recommendationService.test.js`: 4-block schedule (What, Why, How), particulate vs gas differentiation, and budget alternatives.
 - `tests/impactCalculator.test.js`: Commute mode shifting, tree absorption equivalents, fuel savings, and scientific disclaimers.

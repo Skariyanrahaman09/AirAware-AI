@@ -41,10 +41,12 @@ const errorHandler = (err, req, res, next) => {
 
   // Default server error
   const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
+  const isProd = process.env.NODE_ENV === 'production';
+
   res.status(statusCode).json({
     success: false,
-    message: err.message || 'Internal Server Error',
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    message: isProd && statusCode === 500 ? 'Internal server error. Please try again later.' : err.message || 'Internal Server Error',
+    stack: !isProd ? err.stack : undefined,
   });
 };
 

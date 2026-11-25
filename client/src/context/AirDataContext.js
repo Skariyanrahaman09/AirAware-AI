@@ -13,6 +13,9 @@ export function AirDataProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Active AQI calculation standard: 'IN_CPCB' (Indian National AQI) or 'US_EPA' (US EPA AQI)
+  const [activeStandard, setActiveStandard] = useState('auto'); // 'auto' | 'cpcb' | 'epa'
+
   // Real-time tracking & polling states
   const [isRealTimeGps, setIsRealTimeGps] = useState(false);
   const [isLivePolling, setIsLivePolling] = useState(true); // Default to live auto-updating!
@@ -22,7 +25,7 @@ export function AirDataProvider({ children }) {
   const pollingTimerRef = useRef(null);
 
   const fetchAirQuality = useCallback(
-    async (city = selectedCity, coords = coordinates, isGps = isRealTimeGps) => {
+    async (city = selectedCity, coords = coordinates, isGps = isRealTimeGps, standardChoice = activeStandard) => {
       setLoading(true);
       setError(null);
       try {
@@ -37,6 +40,10 @@ export function AirDataProvider({ children }) {
           params.lon = coords.lon;
         } else {
           params.city = 'Delhi';
+        }
+
+        if (standardChoice && standardChoice !== 'auto') {
+          params.standard = standardChoice;
         }
 
         const [currentRes, forecastRes] = await Promise.all([
@@ -69,10 +76,10 @@ export function AirDataProvider({ children }) {
         setLoading(false);
       }
     },
-    [selectedCity, coordinates, isRealTimeGps]
+    [selectedCity, coordinates, isRealTimeGps, activeStandard]
   );
 
-  // Initial load: Attempt Geolocation first if user allows, else load selectedCity
+  // Initial load
   useEffect(() => {
     fetchAirQuality();
   }, [fetchAirQuality]);
@@ -87,7 +94,7 @@ export function AirDataProvider({ children }) {
     pollingTimerRef.current = setInterval(() => {
       setPollingSecondsLeft((prev) => {
         if (prev <= 1) {
-          fetchAirQuality(selectedCity, coordinates, isRealTimeGps);
+          fetchAirQuality(selectedCity, coordinates, isRealTimeGps, activeStandard);
           return 30;
         }
         return prev - 1;
@@ -97,7 +104,12 @@ export function AirDataProvider({ children }) {
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
-  }, [isLivePolling, selectedCity, coordinates, isRealTimeGps, fetchAirQuality]);
+  }, [isLivePolling, selectedCity, coordinates, isRealTimeGps, activeStandard, fetchAirQuality]);
+
+  const changeStandard = (std) => {
+    setActiveStandard(std);
+    fetchAirQuality(selectedCity, coordinates, isRealTimeGps, std);
+  };
 
   // Switch to any city worldwide
   const changeCity = (cityName, customCoords = null) => {
@@ -170,11 +182,13 @@ export function AirDataProvider({ children }) {
         isLivePolling,
         pollingSecondsLeft,
         lastRefreshedAt,
+        activeStandard,
+        changeStandard,
         changeCity,
         enableRealTimeGps,
         toggleLivePolling,
         searchCities,
-        refreshAirQuality: () => fetchAirQuality(selectedCity, coordinates, isRealTimeGps),
+        refreshAirQuality: () => fetchAirQuality(selectedCity, coordinates, isRealTimeGps, activeStandard),
       }}
     >
       {children}

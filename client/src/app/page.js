@@ -152,9 +152,18 @@ export default function HomePage() {
                   {/* Autocomplete Input Container */}
                   <div ref={searchContainerRef} className="relative flex-1">
                     <form onSubmit={handleSearch}>
-                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <label htmlFor="homepage-city-search" className="sr-only">
+                        Search any city worldwide
+                      </label>
+                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
                       <input
+                        id="homepage-city-search"
                         type="text"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded={showSuggestions && suggestions.length > 0}
+                        aria-controls="homepage-city-listbox"
+                        aria-haspopup="listbox"
                         value={searchInput}
                         onFocus={() => setShowSuggestions(true)}
                         onChange={(e) => {
@@ -168,11 +177,18 @@ export default function HomePage() {
 
                     {/* Suggestions Autocomplete Dropdown */}
                     {showSuggestions && suggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden divide-y divide-slate-100 text-xs">
+                      <div
+                        id="homepage-city-listbox"
+                        role="listbox"
+                        aria-label="City suggestions"
+                        className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden divide-y divide-slate-100 text-xs"
+                      >
                         {suggestions.map((item, idx) => (
                           <button
                             key={idx}
                             type="button"
+                            role="option"
+                            aria-selected="false"
                             onClick={() => handleSelectSuggestion(item)}
                             className="w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-emerald-50 transition-colors"
                           >
@@ -193,7 +209,7 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={handleSearch}
-                      className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-xs transition-colors whitespace-nowrap"
+                      className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-xs transition-colors whitespace-nowrap focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden"
                     >
                       Check AQI
                     </button>
@@ -203,7 +219,8 @@ export default function HomePage() {
                       type="button"
                       onClick={enableRealTimeGps}
                       title="Detect Live Coordinates via GPS"
-                      className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all whitespace-nowrap shadow-xs ${
+                      aria-label="Detect Live Coordinates via GPS"
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all whitespace-nowrap shadow-xs focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-hidden ${
                         isRealTimeGps
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-emerald-600/20'
                           : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-300 hover:text-emerald-700'
