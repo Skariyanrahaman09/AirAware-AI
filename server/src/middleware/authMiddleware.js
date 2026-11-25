@@ -1,21 +1,23 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'airaware_ai_secure_jwt_secret_dev_2026';
+const isTest = process.env.NODE_ENV === 'test';
+const JWT_SECRET = process.env.JWT_SECRET || (isTest ? 'airaware-test-secret-only-do-not-use-outside-tests' : null);
 
-/**
- * Authentication middleware to verify JWT token
- */
+if (!JWT_SECRET || (!isTest && JWT_SECRET.length < 32)) {
+  throw new Error('JWT_SECRET must be configured with at least 32 characters before starting the API.');
+}
+
+const getBearerToken = (req) => {
+  const authorization = req.headers.authorization || '';
+  if (!authorization.startsWith('Bearer ')) return null;
+  const token = authorization.slice(7).trim();
+  return token || null;
+};
+
 const requireAuth = async (req, res, next) => {
   try {
-    let token = null;
-
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
-    }
-
+    const token = getBearerToken(req) || req.cookies?.token;
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -23,59 +25,45 @@ const requireAuth = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (!decoded.id) {
+      return res.status(401).json({ success: false, message: 'Invalid or expired authentication token.' });
+    }
 
+    const user = await User.findById(decoded.id).select('-password');
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User account not found.',
-      });
+      return res.status(401).json({ success: false, message: 'User account not found.' });
     }
 
     req.user = user;
-    next();
+    return next();
   } catch (err) {
     return res.status(401).json({
       success: false,
       message: 'Invalid or expired authentication token.',
-      error: err.message,
     });
   }
 };
 
-/**
- * Optional authentication middleware: attaches user if token is present, continues as guest if not
- */
 const optionalAuth = async (req, res, next) => {
   try {
-    let token = null;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
+    const token = getBearerToken(req);
     if (token) {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      const user = await User.findById(decoded.id).select('-password');
-      if (user) {
-        req.user = user;
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+      if (decoded.id) {
+        const user = await User.findById(decoded.id).select('-password');
+        if (user) req.user = user;
       }
     }
   } catch (err) {
-    // Continue as guest
+    // Invalid optional credentials do not grant a user identity.
   }
-  next();
+  return next();
 };
 
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  });
-};
+const generateToken = (userId) => jwt.sign({ id: userId }, JWT_SECRET, {
+  expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  algorithm: 'HS256',
+});
 
-module.exports = {
-  requireAuth,
-  optionalAuth,
-  generateToken,
-  JWT_SECRET,
-};
+module.exports = { requireAuth, optionalAuth, generateToken, JWT_SECRET };
