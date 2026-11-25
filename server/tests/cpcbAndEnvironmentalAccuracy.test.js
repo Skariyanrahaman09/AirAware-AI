@@ -5,9 +5,45 @@ const {
   getSeverityInfo,
   getCurrentAirQuality,
   getForecast,
+  resolveStandard,
 } = require('../src/services/airQualityService');
 
 describe('CPCB NAQI and Environmental Accuracy Suite', () => {
+  describe('Standard Normalization & Resolution (resolveStandard)', () => {
+    test('explicit epa values resolve to US_EPA regardless of case or country', () => {
+      expect(resolveStandard('epa', 'India', 'Delhi')).toBe('US_EPA');
+      expect(resolveStandard('EPA', 'India', 'Delhi')).toBe('US_EPA');
+      expect(resolveStandard('us_epa', 'India', 'Delhi')).toBe('US_EPA');
+      expect(resolveStandard('US-EPA', 'UK', 'London')).toBe('US_EPA');
+    });
+
+    test('explicit cpcb values resolve to IN_CPCB regardless of case or country', () => {
+      expect(resolveStandard('cpcb', 'USA', 'New York')).toBe('IN_CPCB');
+      expect(resolveStandard('CPCB', 'USA', 'New York')).toBe('IN_CPCB');
+      expect(resolveStandard('in_cpcb', 'USA', 'New York')).toBe('IN_CPCB');
+      expect(resolveStandard('IN-CPCB', 'Japan', 'Tokyo')).toBe('IN_CPCB');
+    });
+
+    test('defaults to IN_CPCB for Indian locations when standard is auto', () => {
+      expect(resolveStandard('auto', 'India', 'Delhi')).toBe('IN_CPCB');
+      expect(resolveStandard('auto', '', 'Kolkata')).toBe('IN_CPCB');
+      expect(resolveStandard('auto', 'India', '')).toBe('IN_CPCB');
+    });
+
+    test('defaults to US_EPA for non-Indian locations when standard is auto', () => {
+      expect(resolveStandard('auto', 'United Kingdom', 'London')).toBe('US_EPA');
+      expect(resolveStandard('auto', 'USA', 'New York')).toBe('US_EPA');
+    });
+
+    test('safely handles invalid, null, undefined or unexpected standard values', () => {
+      expect(resolveStandard('invalid_standard', 'India', 'Delhi')).toBe('IN_CPCB');
+      expect(resolveStandard('invalid_standard', 'UK', 'London')).toBe('US_EPA');
+      expect(resolveStandard(null, 'India', 'Mumbai')).toBe('IN_CPCB');
+      expect(resolveStandard(undefined, 'USA', 'Los Angeles')).toBe('US_EPA');
+      expect(resolveStandard(12345, 'India', 'Bengaluru')).toBe('IN_CPCB');
+    });
+  });
+
   describe('Indian Statutory CPCB NAQI Calculation Breakpoints', () => {
     test('calculates Good category (0-50) for PM2.5 <= 30', () => {
       const aqi = calculateCpcbAqi(15, null);
@@ -107,11 +143,38 @@ describe('CPCB NAQI and Environmental Accuracy Suite', () => {
     test('honors explicit standard parameter override for cpcb', async () => {
       const result = await getCurrentAirQuality({ city: 'London', standard: 'cpcb' });
       expect(result.activeStandard).toBe('IN_CPCB');
+      expect(result.aqi).toBe(result.standards.cpcb.aqi);
+      expect(result.category).toBe(result.standards.cpcb.category);
+      expect(result.standard).toContain('CPCB');
     });
 
     test('honors explicit standard parameter override for epa', async () => {
       const result = await getCurrentAirQuality({ city: 'Delhi', standard: 'epa' });
       expect(result.activeStandard).toBe('US_EPA');
+      expect(result.aqi).toBe(result.standards.epa.aqi);
+      expect(result.category).toBe(result.standards.epa.category);
+      expect(result.standard).toContain('US EPA');
+    });
+
+    test('safely falls back to regional default when invalid standard is provided', async () => {
+      const indiaResult = await getCurrentAirQuality({ city: 'Delhi', standard: 'invalid_standard_123' });
+      expect(indiaResult.activeStandard).toBe('IN_CPCB');
+
+      const usResult = await getCurrentAirQuality({ city: 'New York', standard: 'invalid_standard_123' });
+      expect(usResult.activeStandard).toBe('US_EPA');
+    });
+
+    test('correctly applies requested standard dynamically even when reading from cache', async () => {
+      // Prime cache with explicit cpcb
+      const cpcbResult = await getCurrentAirQuality({ city: 'Delhi', standard: 'cpcb' });
+      expect(cpcbResult.activeStandard).toBe('IN_CPCB');
+
+      // Subsequent call for same location with epa override must return US_EPA from cache
+      const epaResult = await getCurrentAirQuality({ city: 'Delhi', standard: 'epa' });
+      expect(epaResult.activeStandard).toBe('US_EPA');
+      expect(epaResult.aqi).toBe(epaResult.standards.epa.aqi);
+      expect(epaResult.category).toBe(epaResult.standards.epa.category);
+      expect(epaResult.standard).toContain('US EPA');
     });
   });
 

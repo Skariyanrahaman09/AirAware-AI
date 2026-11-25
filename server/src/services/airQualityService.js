@@ -454,6 +454,47 @@ async function geocodeCity(cityName) {
 }
 
 /**
+ * Safely resolves and normalizes the target AQI standard:
+ * - Explicit 'epa' / 'us_epa' / 'us-epa' -> 'US_EPA'
+ * - Explicit 'cpcb' / 'in_cpcb' / 'in-cpcb' -> 'IN_CPCB'
+ * - 'auto', undefined, null, or any invalid input -> defaults to 'IN_CPCB' for India, 'US_EPA' for all other countries.
+ */
+function resolveStandard(standard, country = '', cityName = '') {
+  if (typeof standard === 'string') {
+    const s = standard.trim().toLowerCase();
+    if (s === 'epa' || s === 'us_epa' || s === 'us-epa') {
+      return 'US_EPA';
+    }
+    if (s === 'cpcb' || s === 'in_cpcb' || s === 'in-cpcb') {
+      return 'IN_CPCB';
+    }
+  }
+
+  // Determine if location is India
+  const isIndia =
+    (country && country.trim().toLowerCase() === 'india') ||
+    (cityName &&
+      [
+        'delhi',
+        'kolkata',
+        'mumbai',
+        'bengaluru',
+        'bangalore',
+        'chennai',
+        'hyderabad',
+        'lucknow',
+        'patna',
+        'pune',
+        'ahmedabad',
+        'jaipur',
+        'varanasi',
+        'chandigarh',
+      ].includes(cityName.trim().toLowerCase()));
+
+  return isIndia ? 'IN_CPCB' : 'US_EPA';
+}
+
+/**
  * Fetch current air quality & weather for ANY city or GPS coordinates in the world
  */
 async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) {
@@ -483,6 +524,32 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
       const cachedData = { ...cached.data };
       if (city && city.toLowerCase() !== 'delhi') {
         cachedData.city = city;
+      }
+
+      // Consistently resolve and apply the requested standard to cached data
+      const activeStandard = resolveStandard(standard, cachedData.country || locationInfo.country, cachedData.city || locationInfo.name);
+      const isCpcb = activeStandard === 'IN_CPCB';
+      const activeInfo = isCpcb
+        ? cachedData.standards?.cpcb || getCpcbSeverityInfo(cachedData.standards?.cpcb?.aqi ?? cachedData.aqi)
+        : cachedData.standards?.epa || getSeverityInfo(cachedData.standards?.epa?.aqi ?? cachedData.aqi);
+      const activeAqi = activeInfo.aqi ?? cachedData.aqi;
+
+      cachedData.activeStandard = activeStandard;
+      cachedData.aqi = activeAqi;
+      cachedData.severity = activeInfo.severity;
+      cachedData.category = activeInfo.category;
+      cachedData.color = activeInfo.color;
+      cachedData.colorCode = activeInfo.colorCode;
+      cachedData.healthGuidance = activeInfo.healthGuidance;
+      cachedData.maskRecommended = activeInfo.maskRecommended;
+      cachedData.purifierRecommended = activeInfo.purifierRecommended;
+      cachedData.outdoorExercise = activeInfo.outdoorExercise;
+      cachedData.standard = isCpcb ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)';
+      if (cachedData.standards) {
+        cachedData.standards = {
+          ...cachedData.standards,
+          active: activeStandard,
+        };
       }
       cachedData.provenance = 'cached';
       cachedData.provenanceDescription = 'Cached high-accuracy telemetry (5-min TTL)';
@@ -531,10 +598,10 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
     const cpcbInfo = getCpcbSeverityInfo(cpcbAqi);
 
     // Auto-detect standard: India defaults to CPCB NAQI, international defaults to US EPA
-    const isIndia = locationInfo.country === 'India' || (locationInfo.name && ['Delhi', 'Kolkata', 'Mumbai', 'Bengaluru', 'Chennai', 'Hyderabad', 'Lucknow', 'Patna', 'Pune', 'Ahmedabad', 'Jaipur', 'Varanasi', 'Chandigarh'].includes(locationInfo.name));
-    const activeStandard = standard === 'cpcb' ? 'IN_CPCB' : standard === 'epa' ? 'US_EPA' : isIndia ? 'IN_CPCB' : 'US_EPA';
-    const activeInfo = activeStandard === 'IN_CPCB' ? cpcbInfo : epaInfo;
-    const activeAqi = activeStandard === 'IN_CPCB' ? cpcbAqi : epaAqi;
+    const activeStandard = resolveStandard(standard, locationInfo.country, locationInfo.name);
+    const isCpcb = activeStandard === 'IN_CPCB';
+    const activeInfo = isCpcb ? cpcbInfo : epaInfo;
+    const activeAqi = isCpcb ? cpcbAqi : epaAqi;
 
     const weatherCode = weatherCur.weather_code || 0;
     let weatherCondition = 'Clear';
@@ -556,7 +623,7 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
       maskRecommended: activeInfo.maskRecommended,
       purifierRecommended: activeInfo.purifierRecommended,
       outdoorExercise: activeInfo.outdoorExercise,
-      standard: activeStandard === 'IN_CPCB' ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)',
+      standard: isCpcb ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)',
       activeStandard,
       standards: {
         active: activeStandard,
@@ -566,6 +633,10 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
           category: epaInfo.category,
           color: epaInfo.color,
           colorCode: epaInfo.colorCode,
+          healthGuidance: epaInfo.healthGuidance,
+          maskRecommended: epaInfo.maskRecommended,
+          purifierRecommended: epaInfo.purifierRecommended,
+          outdoorExercise: epaInfo.outdoorExercise,
           standardName: 'US EPA AQI',
         },
         cpcb: {
@@ -574,6 +645,10 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
           category: cpcbInfo.category,
           color: cpcbInfo.color,
           colorCode: cpcbInfo.colorCode,
+          healthGuidance: cpcbInfo.healthGuidance,
+          maskRecommended: cpcbInfo.maskRecommended,
+          purifierRecommended: cpcbInfo.purifierRecommended,
+          outdoorExercise: cpcbInfo.outdoorExercise,
           standardName: 'India CPCB NAQI',
         },
       },
@@ -637,10 +712,10 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
     const epaInfo = getSeverityInfo(epaAqi);
     const cpcbInfo = getCpcbSeverityInfo(cpcbAqi);
 
-    const isIndia = displayCountry === 'India';
-    const activeStandard = standard === 'cpcb' ? 'IN_CPCB' : standard === 'epa' ? 'US_EPA' : isIndia ? 'IN_CPCB' : 'US_EPA';
-    const activeInfo = activeStandard === 'IN_CPCB' ? cpcbInfo : epaInfo;
-    const activeAqi = activeStandard === 'IN_CPCB' ? cpcbAqi : epaAqi;
+    const activeStandard = resolveStandard(standard, displayCountry, displayName);
+    const isCpcb = activeStandard === 'IN_CPCB';
+    const activeInfo = isCpcb ? cpcbInfo : epaInfo;
+    const activeAqi = isCpcb ? cpcbAqi : epaAqi;
 
     // Generate realistic hourly trends
     const hourly = [];
@@ -668,7 +743,7 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
       maskRecommended: activeInfo.maskRecommended,
       purifierRecommended: activeInfo.purifierRecommended,
       outdoorExercise: activeInfo.outdoorExercise,
-      standard: activeStandard === 'IN_CPCB' ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)',
+      standard: isCpcb ? 'India CPCB NAQI (0-500)' : 'US EPA AQI (0-500)',
       activeStandard,
       standards: {
         active: activeStandard,
@@ -678,6 +753,10 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
           category: epaInfo.category,
           color: epaInfo.color,
           colorCode: epaInfo.colorCode,
+          healthGuidance: epaInfo.healthGuidance,
+          maskRecommended: epaInfo.maskRecommended,
+          purifierRecommended: epaInfo.purifierRecommended,
+          outdoorExercise: epaInfo.outdoorExercise,
           standardName: 'US EPA AQI',
         },
         cpcb: {
@@ -686,6 +765,10 @@ async function getCurrentAirQuality({ city, lat, lon, standard = 'auto' } = {}) 
           category: cpcbInfo.category,
           color: cpcbInfo.color,
           colorCode: cpcbInfo.colorCode,
+          healthGuidance: cpcbInfo.healthGuidance,
+          maskRecommended: cpcbInfo.maskRecommended,
+          purifierRecommended: cpcbInfo.purifierRecommended,
+          outdoorExercise: cpcbInfo.outdoorExercise,
           standardName: 'India CPCB NAQI',
         },
       },
@@ -754,6 +837,7 @@ async function getForecast({ city = 'Delhi', lat, lon, standard = 'auto' } = {})
 module.exports = {
   getCurrentAirQuality,
   getForecast,
+  resolveStandard,
   calculateAqiFromPm25,
   calculateCpcbAqi,
   getSeverityInfo,
