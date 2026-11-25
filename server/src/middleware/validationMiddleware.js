@@ -26,8 +26,8 @@ const validateRegister = (req, res, next) => {
     errors.push('A valid email address is required.');
   }
 
-  if (!password || typeof password !== 'string' || !PASSWORD_REGEX.test(password)) {
-    errors.push('Password must be at least 8 characters long and contain both letters and numbers.');
+  if (!password || typeof password !== 'string' || password.length < 8 || password.length > 72 || !PASSWORD_REGEX.test(password)) {
+    errors.push('Password must be between 8 and 72 characters and contain both letters and numbers.');
   }
 
   if (city && (typeof city !== 'string' || city.trim().length > 100)) {
@@ -52,7 +52,7 @@ const validateLogin = (req, res, next) => {
     errors.push('A valid email address is required.');
   }
 
-  if (!password || typeof password !== 'string' || password.length === 0) {
+  if (!password || typeof password !== 'string' || password.length === 0 || password.length > 72) {
     errors.push('Password is required.');
   }
 

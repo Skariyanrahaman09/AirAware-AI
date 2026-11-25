@@ -27,10 +27,10 @@ const register = async (req, res, next) => {
     }
 
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(password)) {
+    if (!password || typeof password !== 'string' || password.length < 8 || password.length > 72 || !passwordRegex.test(password)) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 8 characters long and contain both letters and numbers.',
+        message: 'Password must be between 8 and 72 characters and contain both letters and numbers.',
       });
     }
 
@@ -44,7 +44,7 @@ const register = async (req, res, next) => {
 
     const user = await User.create({
       name,
-      email,
+      email: trimmedEmail,
       password,
       city: city || 'Delhi',
     });
@@ -83,10 +83,10 @@ const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required.',
+        message: 'Email and password must be valid strings.',
       });
     }
 

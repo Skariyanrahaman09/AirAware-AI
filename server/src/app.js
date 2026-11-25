@@ -19,6 +19,22 @@ const app = express();
 // Trust reverse proxy header (essential for Render, Vercel, Heroku, Cloudflare load balancers)
 app.set('trust proxy', 1);
 
+// Auto-connect to in-memory database in test environment if disconnected
+if (process.env.NODE_ENV === 'test') {
+  const mongoose = require('mongoose');
+  const { connectDB } = require('./config/database');
+  app.use(async (req, res, next) => {
+    if (mongoose.connection.readyState === 0) {
+      try {
+        await connectDB();
+      } catch (err) {
+        return next(err);
+      }
+    }
+    next();
+  });
+}
+
 // Security Headers (OWASP compliant)
 app.use(securityHeaders);
 
