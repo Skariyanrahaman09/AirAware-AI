@@ -3,8 +3,8 @@ const { SYSTEM_PROMPT, buildUserChatPrompt } = require('../utils/promptTemplates
 const { getSeverityInfo } = require('./airQualityService');
 
 function generateExpertEnvironmentalResponse({ query = '', airData = {}, weatherData = {} }) {
-  const hasAqi = Number.isFinite(Number(airData?.aqi));
-  const aqi = hasAqi ? Number(airData.aqi) : null;
+  const hasAqi = typeof airData?.aqi === 'number' && Number.isFinite(airData.aqi);
+  const aqi = hasAqi ? airData.aqi : null;
   const city = airData?.city || 'your area';
   const severityInfo = hasAqi ? getSeverityInfo(aqi) : null;
   const qLower = String(query).toLowerCase();
