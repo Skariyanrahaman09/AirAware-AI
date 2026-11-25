@@ -3,7 +3,6 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { notFoundHandler, errorHandler } = require('./middleware/errorMiddleware');
 
-// Route imports
 const authRoutes = require('./routes/authRoutes');
 const airQualityRoutes = require('./routes/airQualityRoutes');
 const aiRoutes = require('./routes/aiRoutes');
@@ -13,35 +12,38 @@ const familyRoutes = require('./routes/familyRoutes');
 const communityRoutes = require('./routes/communityRoutes');
 
 const app = express();
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-// Security & Parsing Middleware
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.disable('x-powered-by');
 
-// Rate limiting (generous in development and skips localhost/health)
+app.use(cors({
+  origin(origin, callback) {
+    // Requests without an Origin header (health checks, CLI clients) are not browser CORS requests.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 600,
+}));
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
 if (process.env.NODE_ENV !== 'test') {
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5000, // generous allowance for smooth frontend navigation & proxying
-    standardHeaders: true,
+  app.use('/api', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: 'draft-8',
     legacyHeaders: false,
     skip: (req) => req.path === '/health' || req.path === '/api/health',
-    message: {
-      success: false,
-      message: 'Too many requests from this IP, please try again after 15 minutes.',
-    },
-  });
-  app.use('/api', limiter);
+    message: { success: false, message: 'Too many requests. Please try again later.' },
+  }));
 }
 
-// Health Check Endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -52,7 +54,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Mount Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/air-quality', airQualityRoutes);
 app.use('/api/ai', aiRoutes);
@@ -61,7 +62,6 @@ app.use('/api/impact', impactRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/community', communityRoutes);
 
-// Error Handling
 app.use(notFoundHandler);
 app.use(errorHandler);
 
