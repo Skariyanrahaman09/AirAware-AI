@@ -1,54 +1,46 @@
-/**
- * Centralized error handling and 404 middlewares
- */
-
-const notFoundHandler = (req, res, next) => {
+const notFoundHandler = (req, res) => {
   res.status(404).json({
     success: false,
-    message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+    message: 'API endpoint not found.',
   });
 };
 
 const errorHandler = (err, req, res, next) => {
-  console.error('[Error Middleware]:', err.stack || err.message);
+  if (res.headersSent) return next(err);
 
-  // Mongoose validation error
-  if (err.name === 'ValidationError') {
-    const messages = Object.values(err.errors).map((val) => val.message);
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: messages,
-    });
+  // Keep diagnostic details in server logs; never send stacks or raw errors to clients.
+  console.error('[Error Middleware]', {
+    name: err.name,
+    message: err.message,
+    path: req.originalUrl,
+    method: req.method,
+  });
+
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'Request body is too large.' });
   }
 
-  // Mongoose duplicate key error (code 11000)
+  if (err.name === 'ValidationError') {
+    const messages = Object.values(err.errors || {}).map((value) => value.message);
+    return res.status(400).json({ success: false, message: 'Validation failed', errors: messages });
+  }
+
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue || {})[0] || 'field';
-    return res.status(409).json({
-      success: false,
-      message: `An account with that ${field} already exists.`,
-    });
+    return res.status(409).json({ success: false, message: `An account with that ${field} already exists.` });
   }
 
-  // JWT error
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid authorization token',
-    });
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    return res.status(401).json({ success: false, message: 'Invalid authorization token.' });
   }
 
-  // Default server error
-  const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
-  res.status(statusCode).json({
+  const statusCode = Number.isInteger(err.statusCode) && err.statusCode >= 400 && err.statusCode < 500
+    ? err.statusCode
+    : 500;
+  return res.status(statusCode).json({
     success: false,
-    message: err.message || 'Internal Server Error',
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    message: statusCode === 500 ? 'An unexpected server error occurred.' : err.message,
   });
 };
 
-module.exports = {
-  notFoundHandler,
-  errorHandler,
-};
+module.exports = { notFoundHandler, errorHandler };
